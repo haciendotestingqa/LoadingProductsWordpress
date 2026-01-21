@@ -4,6 +4,7 @@
 
 const STORAGE_KEY = 'yupoo_products_state';
 const STORAGE_COLLECTION_KEY = 'yupoo_selected_collection';
+const STORAGE_PRODUCTS_LIST_KEY = 'yupoo_products_list';
 
 /**
  * Guarda el estado completo de la aplicación en LocalStorage.
@@ -57,12 +58,39 @@ function loadSelectedCollection() {
 }
 
 /**
+ * Guarda la lista completa de productos (incluyendo duplicados).
+ * @param {Array} products - Lista completa de productos
+ */
+function saveProductsList(products) {
+    try {
+        localStorage.setItem(STORAGE_PRODUCTS_LIST_KEY, JSON.stringify(products));
+    } catch (e) {
+        console.error('Error al guardar lista de productos:', e);
+    }
+}
+
+/**
+ * Carga la lista completa de productos guardada.
+ * @returns {Array|null} Lista de productos o null si no existe
+ */
+function loadProductsList() {
+    try {
+        const stored = localStorage.getItem(STORAGE_PRODUCTS_LIST_KEY);
+        return stored ? JSON.parse(stored) : null;
+    } catch (e) {
+        console.error('Error al cargar lista de productos:', e);
+        return null;
+    }
+}
+
+/**
  * Limpia todo el estado guardado.
  */
 function clearState() {
     try {
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(STORAGE_COLLECTION_KEY);
+        localStorage.removeItem(STORAGE_PRODUCTS_LIST_KEY);
     } catch (e) {
         console.error('Error al limpiar LocalStorage:', e);
     }

@@ -126,6 +126,8 @@ function setupCollectionSelector() {
         selectedCollection = e.target.value;
         if (selectedCollection) {
             saveSelectedCollection(selectedCollection);
+            // Limpiar lista guardada al cambiar de colección
+            localStorage.removeItem('yupoo_products_list');
             await loadProducts(selectedCollection);
             currentPage = 1;
             renderPage(1);
@@ -141,7 +143,27 @@ async function loadProducts(collectionName) {
         const response = await fetch(`/api/products?collection=${encodeURIComponent(collectionName)}`);
         const data = await response.json();
         if (data.success) {
-            allProducts = data.products;
+            // Cargar productos base desde API
+            const baseProducts = data.products;
+            
+            // Intentar restaurar lista con duplicados desde LocalStorage
+            const savedProductsList = loadProductsList();
+            if (savedProductsList && savedProductsList.length > 0) {
+                // Verificar que la colección coincida
+                if (savedProductsList[0] && savedProductsList[0].collection === collectionName) {
+                    allProducts = savedProductsList;
+                    console.log('Productos con duplicados restaurados desde LocalStorage');
+                } else {
+                    // Si la colección cambió, usar productos base
+                    allProducts = baseProducts;
+                    saveProductsList(allProducts);
+                }
+            } else {
+                // Si no hay lista guardada, usar productos base
+                allProducts = baseProducts;
+                saveProductsList(allProducts);
+            }
+            
             // Guardar total de productos
             sessionStorage.setItem('totalProducts', allProducts.length.toString());
             // Restaurar estado guardado
@@ -482,6 +504,9 @@ function handleDuplicate(productIndex) {
     const product = allProducts[productIndex];
     allProducts.splice(productIndex + 1, 0, product);
     
+    // Guardar la lista completa de productos (incluyendo duplicados)
+    saveProductsList(allProducts);
+    
     // Actualizar índices de estados
     const newStates = {};
     Object.keys(productStates).forEach(key => {
@@ -501,6 +526,9 @@ function handleDuplicate(productIndex) {
     state.products = productStates;
     saveState(state);
     
+    // Actualizar total de productos
+    sessionStorage.setItem('totalProducts', allProducts.length.toString());
+    
     // Re-renderizar página actual
     renderPage(currentPage);
 }
@@ -512,6 +540,9 @@ function handleDelete(productIndex) {
     if (confirm('¿Estás seguro de que deseas eliminar este producto?')) {
         // Eliminar producto
         allProducts.splice(productIndex, 1);
+        
+        // Guardar la lista completa de productos actualizada
+        saveProductsList(allProducts);
         
         // Actualizar índices de estados
         const newStates = {};
@@ -528,7 +559,12 @@ function handleDelete(productIndex) {
         productStates = newStates;
         
         // Guardar estado completo
-        saveState({ products: productStates });
+        const state = loadState() || {};
+        state.products = productStates;
+        saveState(state);
+        
+        // Actualizar total de productos
+        sessionStorage.setItem('totalProducts', allProducts.length.toString());
         
         // Re-renderizar página actual
         renderPage(currentPage);

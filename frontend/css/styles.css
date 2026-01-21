@@ -124,11 +124,11 @@ tbody tr.row-even {
 }
 
 tbody tr.row-odd {
-    background-color: #f8f9fa;
+    background-color: #e5e7eb;
 }
 
 tbody tr:hover {
-    background-color: #e9ecef;
+    background-color: #d1d5db;
 }
 
 tbody td {
