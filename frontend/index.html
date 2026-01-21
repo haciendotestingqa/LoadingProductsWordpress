@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro de Productos</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Registro de Productos</h1>
+        </header>
+
+        <!-- Selector de colección (si hay múltiples) -->
+        <div id="collection-selector" class="collection-selector" style="display: none;">
+            <label for="collection-dropdown">Colección:</label>
+            <select id="collection-dropdown">
+                <option value="">Seleccionar colección...</option>
+            </select>
+        </div>
+
+        <!-- Tabla de productos -->
+        <div class="table-container">
+            <table id="products-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Título</th>
+                        <th>Color</th>
+                        <th>Imágenes</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="products-tbody">
+                    <!-- Las filas se generan dinámicamente -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Controles de paginación -->
+        <div class="pagination">
+            <button id="prev-page" class="btn-pagination" disabled>Anterior</button>
+            <span id="page-info">Página 1 de 1</span>
+            <button id="next-page" class="btn-pagination" disabled>Siguiente</button>
+        </div>
+
+        <!-- Botón Preview -->
+        <div class="preview-section">
+            <button id="preview-btn" class="btn-preview" disabled>Preview</button>
+        </div>
+    </div>
+
+    <script src="/js/storage.js"></script>
+    <script src="/js/main.js"></script>
+</body>
+</html>

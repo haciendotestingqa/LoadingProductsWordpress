@@ -1,0 +1,636 @@
+/**
+ * Lógica principal de la página de registro de productos.
+ */
+
+// Estado global
+let allProducts = [];
+let allTitles = [];
+let allCollections = [];
+let selectedCollection = null;
+let currentPage = 1;
+const PRODUCTS_PER_PAGE = 25;
+let productStates = {}; // Estado de cada producto: {title, color, checkboxes}
+
+// Colores predefinidos
+const COLORS = [
+    'Rojo', 'Azul', 'Verde', 'Negro', 'Blanco', 'Gris', 
+    'Amarillo', 'Naranja', 'Rosa', 'Morado', 'Marrón', 'Beige'
+];
+
+/**
+ * Inicializa la aplicación al cargar la página.
+ */
+async function init() {
+    try {
+        // 1. Cargar títulos desde API
+        await loadTitles();
+        
+        // 2. Cargar colecciones desde API
+        await loadCollections();
+        
+        // 3. Si hay múltiples colecciones, mostrar dropdown
+        if (allCollections.length > 1) {
+            setupCollectionSelector();
+        } else if (allCollections.length === 1) {
+            selectedCollection = allCollections[0];
+            await loadProducts(selectedCollection);
+        }
+        
+        // 4. Restaurar estado desde LocalStorage
+        restoreState();
+        
+        // 5. Obtener página desde URL o usar 1
+        const urlParams = new URLSearchParams(window.location.search);
+        const pageFromUrl = parseInt(urlParams.get('page')) || 1;
+        
+        // Guardar total de productos para cálculo de páginas
+        if (allProducts.length > 0) {
+            sessionStorage.setItem('totalProducts', allProducts.length.toString());
+        }
+        
+        // 6. Renderizar página
+        renderPage(pageFromUrl);
+        
+    } catch (error) {
+        console.error('Error al inicializar:', error);
+        alert('Error al cargar los datos. Por favor, recarga la página.');
+    }
+}
+
+/**
+ * Carga los títulos desde la API.
+ */
+async function loadTitles() {
+    try {
+        const response = await fetch('/api/titles');
+        const data = await response.json();
+        if (data.success) {
+            allTitles = data.titles;
+        } else {
+            throw new Error(data.error || 'Error al cargar títulos');
+        }
+    } catch (error) {
+        console.error('Error al cargar títulos:', error);
+        throw error;
+    }
+}
+
+/**
+ * Carga las colecciones desde la API.
+ */
+async function loadCollections() {
+    try {
+        const response = await fetch('/api/collections');
+        const data = await response.json();
+        if (data.success) {
+            allCollections = data.collections;
+        } else {
+            throw new Error(data.error || 'Error al cargar colecciones');
+        }
+    } catch (error) {
+        console.error('Error al cargar colecciones:', error);
+        throw error;
+    }
+}
+
+/**
+ * Configura el selector de colección.
+ */
+function setupCollectionSelector() {
+    const selector = document.getElementById('collection-selector');
+    const dropdown = document.getElementById('collection-dropdown');
+    
+    selector.style.display = 'block';
+    
+    // Limpiar opciones existentes
+    dropdown.innerHTML = '<option value="">Seleccionar colección...</option>';
+    
+    // Añadir colecciones
+    allCollections.forEach(collection => {
+        const option = document.createElement('option');
+        option.value = collection;
+        option.textContent = collection;
+        dropdown.appendChild(option);
+    });
+    
+    // Restaurar selección guardada
+    const savedCollection = loadSelectedCollection();
+    if (savedCollection && allCollections.includes(savedCollection)) {
+        dropdown.value = savedCollection;
+        selectedCollection = savedCollection;
+        loadProducts(selectedCollection);
+    }
+    
+    // Event listener para cambio de colección
+    dropdown.addEventListener('change', async (e) => {
+        selectedCollection = e.target.value;
+        if (selectedCollection) {
+            saveSelectedCollection(selectedCollection);
+            await loadProducts(selectedCollection);
+            currentPage = 1;
+            renderPage(1);
+        }
+    });
+}
+
+/**
+ * Carga los productos de una colección.
+ */
+async function loadProducts(collectionName) {
+    try {
+        const response = await fetch(`/api/products?collection=${encodeURIComponent(collectionName)}`);
+        const data = await response.json();
+        if (data.success) {
+            allProducts = data.products;
+            // Guardar total de productos
+            sessionStorage.setItem('totalProducts', allProducts.length.toString());
+            // Restaurar estado guardado
+            restoreState();
+            // Obtener página desde URL o usar 1
+            const urlParams = new URLSearchParams(window.location.search);
+            const pageFromUrl = parseInt(urlParams.get('page')) || 1;
+            renderPage(pageFromUrl);
+        } else {
+            throw new Error(data.error || 'Error al cargar productos');
+        }
+    } catch (error) {
+        console.error('Error al cargar productos:', error);
+        alert('Error al cargar los productos. Por favor, intenta de nuevo.');
+    }
+}
+
+/**
+ * Restaura el estado desde LocalStorage.
+ */
+function restoreState() {
+    const savedState = loadState();
+    if (savedState && savedState.products) {
+        productStates = savedState.products;
+    } else {
+        productStates = {};
+    }
+}
+
+/**
+ * Renderiza una página específica de productos.
+ */
+function renderPage(pageNum) {
+    if (!selectedCollection || allProducts.length === 0) {
+        return;
+    }
+    
+    currentPage = pageNum;
+    const startIndex = (pageNum - 1) * PRODUCTS_PER_PAGE;
+    const endIndex = Math.min(startIndex + PRODUCTS_PER_PAGE, allProducts.length);
+    const pageProducts = allProducts.slice(startIndex, endIndex);
+    
+    const tbody = document.getElementById('products-tbody');
+    tbody.innerHTML = '';
+    
+    pageProducts.forEach((product, index) => {
+        const globalIndex = startIndex + index;
+        const row = createProductRow(product, globalIndex);
+        tbody.appendChild(row);
+    });
+    
+    // Actualizar controles de paginación
+    updatePagination();
+    
+    // Actualizar botón Preview
+    updatePreviewButton();
+}
+
+/**
+ * Crea una fila de producto en la tabla.
+ */
+function createProductRow(product, globalIndex) {
+    const tr = document.createElement('tr');
+    tr.dataset.productIndex = globalIndex;
+    
+    // Columna Item
+    const tdItem = document.createElement('td');
+    tdItem.textContent = globalIndex + 1;
+    tr.appendChild(tdItem);
+    
+    // Columna Título
+    const tdTitle = document.createElement('td');
+    const titleSelect = document.createElement('select');
+    titleSelect.className = 'title-select';
+    titleSelect.dataset.productIndex = globalIndex;
+    titleSelect.innerHTML = '<option value="">Seleccionar título...</option>';
+    allTitles.forEach(title => {
+        const option = document.createElement('option');
+        option.value = title.id;
+        option.textContent = title.titulo;
+        titleSelect.appendChild(option);
+    });
+    
+    // Restaurar título guardado
+    const savedState = productStates[globalIndex];
+    if (savedState && savedState.title) {
+        titleSelect.value = savedState.title;
+    }
+    
+    titleSelect.addEventListener('change', (e) => {
+        if (!productStates[globalIndex]) {
+            productStates[globalIndex] = {};
+        }
+        productStates[globalIndex].title = e.target.value;
+        saveProductState(globalIndex, productStates[globalIndex]);
+        updatePreviewButton();
+    });
+    
+    tdTitle.appendChild(titleSelect);
+    tr.appendChild(tdTitle);
+    
+    // Columna Color
+    const tdColor = document.createElement('td');
+    const colorSelect = document.createElement('select');
+    colorSelect.className = 'color-select';
+    colorSelect.dataset.productIndex = globalIndex;
+    colorSelect.innerHTML = '<option value="">Seleccionar color...</option>';
+    COLORS.forEach(color => {
+        const option = document.createElement('option');
+        option.value = color;
+        option.textContent = color;
+        colorSelect.appendChild(option);
+    });
+    
+    // Restaurar color guardado
+    if (savedState && savedState.color) {
+        colorSelect.value = savedState.color;
+    }
+    
+    colorSelect.addEventListener('change', (e) => {
+        if (!productStates[globalIndex]) {
+            productStates[globalIndex] = {};
+        }
+        productStates[globalIndex].color = e.target.value;
+        saveProductState(globalIndex, productStates[globalIndex]);
+        updatePreviewButton();
+    });
+    
+    tdColor.appendChild(colorSelect);
+    tr.appendChild(tdColor);
+    
+    // Columna Imágenes
+    const tdImages = document.createElement('td');
+    tdImages.className = 'images-cell';
+    
+    const imagesContainer = document.createElement('div');
+    imagesContainer.className = 'images-container';
+    
+    product.images.forEach((imageName, imageIndex) => {
+        const imageWrapper = document.createElement('div');
+        imageWrapper.className = 'image-wrapper';
+        
+        const img = document.createElement('img');
+        img.src = `/yupoo_downloads/${product.collection}/${product.page}/${product.name}/${imageName}`;
+        img.alt = imageName;
+        img.className = 'product-thumbnail';
+        imageWrapper.appendChild(img);
+        
+        const checkboxesContainer = document.createElement('div');
+        checkboxesContainer.className = 'checkboxes-container';
+        
+        // Checkbox P (Producto)
+        const checkboxP = document.createElement('input');
+        checkboxP.type = 'checkbox';
+        checkboxP.id = `p-${globalIndex}-${imageIndex}`;
+        checkboxP.className = 'checkbox-p';
+        checkboxP.dataset.productIndex = globalIndex;
+        checkboxP.dataset.imageIndex = imageIndex;
+        
+        // Restaurar estado del checkbox P
+        if (savedState && savedState.checkboxesP && savedState.checkboxesP.includes(imageIndex)) {
+            checkboxP.checked = true;
+        }
+        
+        checkboxP.addEventListener('change', (e) => {
+            handleCheckboxP(globalIndex, imageIndex, e.target.checked);
+        });
+        
+        const labelP = document.createElement('label');
+        labelP.htmlFor = checkboxP.id;
+        labelP.textContent = 'P';
+        
+        checkboxesContainer.appendChild(checkboxP);
+        checkboxesContainer.appendChild(labelP);
+        
+        // Checkbox G (Galería)
+        const checkboxG = document.createElement('input');
+        checkboxG.type = 'checkbox';
+        checkboxG.id = `g-${globalIndex}-${imageIndex}`;
+        checkboxG.className = 'checkbox-g';
+        checkboxG.dataset.productIndex = globalIndex;
+        checkboxG.dataset.imageIndex = imageIndex;
+        
+        // Restaurar estado del checkbox G
+        if (savedState && savedState.checkboxesG && savedState.checkboxesG.includes(imageIndex)) {
+            checkboxG.checked = true;
+        }
+        
+        checkboxG.addEventListener('change', (e) => {
+            handleCheckboxG(globalIndex, imageIndex, e.target.checked);
+        });
+        
+        const labelG = document.createElement('label');
+        labelG.htmlFor = checkboxG.id;
+        labelG.textContent = 'G';
+        
+        checkboxesContainer.appendChild(checkboxG);
+        checkboxesContainer.appendChild(labelG);
+        
+        imageWrapper.appendChild(checkboxesContainer);
+        imagesContainer.appendChild(imageWrapper);
+    });
+    
+    tdImages.appendChild(imagesContainer);
+    tr.appendChild(tdImages);
+    
+    // Columna Acciones
+    const tdActions = document.createElement('td');
+    tdActions.className = 'actions-cell';
+    
+    const btnDuplicate = document.createElement('button');
+    btnDuplicate.className = 'btn-duplicate';
+    btnDuplicate.textContent = 'Duplicar';
+    btnDuplicate.addEventListener('click', () => handleDuplicate(globalIndex));
+    
+    const btnDelete = document.createElement('button');
+    btnDelete.className = 'btn-delete';
+    btnDelete.textContent = 'Borrar';
+    btnDelete.addEventListener('click', () => handleDelete(globalIndex));
+    
+    tdActions.appendChild(btnDuplicate);
+    tdActions.appendChild(btnDelete);
+    tr.appendChild(tdActions);
+    
+    return tr;
+}
+
+/**
+ * Maneja el cambio de checkbox P (solo uno permitido por fila).
+ */
+function handleCheckboxP(productIndex, imageIndex, checked) {
+    if (!productStates[productIndex]) {
+        productStates[productIndex] = {};
+    }
+    
+    if (!productStates[productIndex].checkboxesP) {
+        productStates[productIndex].checkboxesP = [];
+    }
+    
+    if (checked) {
+        // Desmarcar otros checkboxes P de la misma fila
+        const row = document.querySelector(`tr[data-product-index="${productIndex}"]`);
+        const otherCheckboxesP = row.querySelectorAll('.checkbox-p');
+        otherCheckboxesP.forEach(cb => {
+            if (cb.dataset.imageIndex != imageIndex) {
+                cb.checked = false;
+                const idx = productStates[productIndex].checkboxesP.indexOf(parseInt(cb.dataset.imageIndex));
+                if (idx > -1) {
+                    productStates[productIndex].checkboxesP.splice(idx, 1);
+                }
+            }
+        });
+        
+        // Añadir este checkbox
+        if (!productStates[productIndex].checkboxesP.includes(imageIndex)) {
+            productStates[productIndex].checkboxesP.push(imageIndex);
+        }
+    } else {
+        // Remover este checkbox
+        const idx = productStates[productIndex].checkboxesP.indexOf(imageIndex);
+        if (idx > -1) {
+            productStates[productIndex].checkboxesP.splice(idx, 1);
+        }
+    }
+    
+    saveProductState(productIndex, productStates[productIndex]);
+    updatePreviewButton();
+}
+
+/**
+ * Maneja el cambio de checkbox G (múltiples permitidos).
+ */
+function handleCheckboxG(productIndex, imageIndex, checked) {
+    if (!productStates[productIndex]) {
+        productStates[productIndex] = {};
+    }
+    
+    if (!productStates[productIndex].checkboxesG) {
+        productStates[productIndex].checkboxesG = [];
+    }
+    
+    if (checked) {
+        if (!productStates[productIndex].checkboxesG.includes(imageIndex)) {
+            productStates[productIndex].checkboxesG.push(imageIndex);
+        }
+    } else {
+        const idx = productStates[productIndex].checkboxesG.indexOf(imageIndex);
+        if (idx > -1) {
+            productStates[productIndex].checkboxesG.splice(idx, 1);
+        }
+    }
+    
+    saveProductState(productIndex, productStates[productIndex]);
+    updatePreviewButton();
+}
+
+/**
+ * Duplica una fila de producto.
+ */
+function handleDuplicate(productIndex) {
+    // Insertar el mismo producto después del actual
+    const product = allProducts[productIndex];
+    allProducts.splice(productIndex + 1, 0, product);
+    
+    // Actualizar índices de estados
+    const newStates = {};
+    Object.keys(productStates).forEach(key => {
+        const idx = parseInt(key);
+        if (idx > productIndex) {
+            newStates[idx + 1] = productStates[key];
+        } else {
+            newStates[key] = productStates[key];
+        }
+    });
+    
+    // La nueva fila no tiene estado (todo en blanco)
+    productStates = newStates;
+    
+    // Guardar estado completo
+    const state = loadState() || {};
+    state.products = productStates;
+    saveState(state);
+    
+    // Re-renderizar página actual
+    renderPage(currentPage);
+}
+
+/**
+ * Elimina una fila de producto.
+ */
+function handleDelete(productIndex) {
+    if (confirm('¿Estás seguro de que deseas eliminar este producto?')) {
+        // Eliminar producto
+        allProducts.splice(productIndex, 1);
+        
+        // Actualizar índices de estados
+        const newStates = {};
+        Object.keys(productStates).forEach(key => {
+            const idx = parseInt(key);
+            if (idx < productIndex) {
+                newStates[key] = productStates[key];
+            } else if (idx > productIndex) {
+                newStates[idx - 1] = productStates[key];
+            }
+            // idx === productIndex se omite (se elimina)
+        });
+        
+        productStates = newStates;
+        
+        // Guardar estado completo
+        saveState({ products: productStates });
+        
+        // Re-renderizar página actual
+        renderPage(currentPage);
+    }
+}
+
+/**
+ * Actualiza los controles de paginación.
+ */
+function updatePagination() {
+    const totalPages = Math.ceil(allProducts.length / PRODUCTS_PER_PAGE);
+    const pageInfo = document.getElementById('page-info');
+    pageInfo.textContent = `Página ${currentPage} de ${totalPages}`;
+    
+    const prevBtn = document.getElementById('prev-page');
+    const nextBtn = document.getElementById('next-page');
+    
+    prevBtn.disabled = currentPage === 1;
+    nextBtn.disabled = currentPage >= totalPages;
+    
+    prevBtn.onclick = () => {
+        if (currentPage > 1) {
+            renderPage(currentPage - 1);
+        }
+    };
+    
+    nextBtn.onclick = () => {
+        if (currentPage < totalPages) {
+            renderPage(currentPage + 1);
+        }
+    };
+}
+
+/**
+ * Actualiza el estado del botón Preview.
+ */
+function updatePreviewButton() {
+    const previewBtn = document.getElementById('preview-btn');
+    const startIndex = (currentPage - 1) * PRODUCTS_PER_PAGE;
+    const endIndex = Math.min(startIndex + PRODUCTS_PER_PAGE, allProducts.length);
+    
+    // Validar que todos los productos tengan título, color y al menos un checkbox
+    let isValid = true;
+    for (let i = startIndex; i < endIndex; i++) {
+        const state = productStates[i];
+        if (!state || !state.title || !state.color) {
+            isValid = false;
+            break;
+        }
+        const hasCheckbox = (state.checkboxesP && state.checkboxesP.length > 0) ||
+                          (state.checkboxesG && state.checkboxesG.length > 0);
+        if (!hasCheckbox) {
+            isValid = false;
+            break;
+        }
+    }
+    
+    previewBtn.disabled = !isValid;
+}
+
+/**
+ * Maneja el clic en el botón Preview.
+ */
+async function handlePreview() {
+    const startIndex = (currentPage - 1) * PRODUCTS_PER_PAGE;
+    const endIndex = Math.min(startIndex + PRODUCTS_PER_PAGE, allProducts.length);
+    const pageProducts = allProducts.slice(startIndex, endIndex);
+    
+    // Preparar datos para el preview
+    const previewData = [];
+    
+    for (let i = startIndex; i < endIndex; i++) {
+        const product = allProducts[i];
+        const state = productStates[i];
+        
+        if (!state || !state.title || !state.color) {
+            alert('Por favor, completa todos los campos (título y color) para todos los productos.');
+            return;
+        }
+        
+        // Obtener título completo
+        const titleObj = allTitles.find(t => t.id == state.title);
+        const titleName = titleObj ? titleObj.titulo : '';
+        
+        // Obtener imagen de producto (P)
+        let productImage = null;
+        if (state.checkboxesP && state.checkboxesP.length > 0) {
+            const imageIndex = state.checkboxesP[0];
+            productImage = product.images[imageIndex];
+        }
+        
+        // Obtener imágenes de galería (G)
+        const galleryImages = [];
+        if (state.checkboxesG && state.checkboxesG.length > 0) {
+            state.checkboxesG.forEach(imageIndex => {
+                galleryImages.push(product.images[imageIndex]);
+            });
+        }
+        
+        previewData.push({
+            collection: product.collection,
+            page: product.page,
+            name: product.name,
+            title: titleName,
+            color: state.color,
+            productImage: productImage,
+            galleryImages: galleryImages
+        });
+    }
+    
+    // Enviar al backend para procesar marca de agua
+    try {
+        const response = await fetch('/api/preview', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ products: previewData })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            // Guardar datos en sessionStorage para la página de preview
+            sessionStorage.setItem('previewData', JSON.stringify(data.products));
+            // Guardar página actual
+            sessionStorage.setItem('currentPage', currentPage.toString());
+            // Navegar a preview.html
+            window.location.href = '/preview.html';
+        } else {
+            alert('Error al procesar el preview: ' + (data.error || 'Error desconocido'));
+        }
+    } catch (error) {
+        console.error('Error al enviar preview:', error);
+        alert('Error al procesar el preview. Por favor, intenta de nuevo.');
+    }
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', init);
+
+document.getElementById('preview-btn').addEventListener('click', handlePreview);
