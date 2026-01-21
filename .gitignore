@@ -18,3 +18,25 @@ __pycache__/
 
 # Descargas
 yupoo_downloads/
+
+# Imágenes con marca de agua
+imagenes_marca_agua/
+
+# Archivos de imágenes (cualquier extensión)
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.tif
+*.webp
+*.svg
+*.ico
+*.heic
+*.heif
+*.raw
+*.cr2
+*.nef
+*.orf
+*.sr2
