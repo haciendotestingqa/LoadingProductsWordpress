@@ -216,7 +216,13 @@ def serve_watermarked_images(filename):
 @app.route('/yupoo_downloads/<path:filename>')
 def serve_original_images(filename):
     """Servir imágenes originales de yupoo_downloads."""
-    image_path = PROJECT_ROOT / 'yupoo_downloads' / filename
+    from urllib.parse import unquote
+    
+    # Decodificar la ruta para manejar caracteres especiales y chinos
+    decoded_filename = unquote(filename)
+    
+    # Construir la ruta del archivo
+    image_path = PROJECT_ROOT / 'yupoo_downloads' / decoded_filename
     
     # Verificar que el archivo esté dentro del directorio yupoo_downloads por seguridad
     try:
@@ -225,7 +231,11 @@ def serve_original_images(filename):
         return jsonify({"error": "Acceso denegado"}), 403
     
     if image_path.exists() and image_path.is_file():
-        return send_from_directory(str(PROJECT_ROOT / 'yupoo_downloads'), filename)
+        # Usar la ruta decodificada para servir el archivo
+        directory = str(PROJECT_ROOT / 'yupoo_downloads')
+        # Necesitamos reconstruir la ruta relativa desde el directorio base
+        relative_path = image_path.relative_to(PROJECT_ROOT / 'yupoo_downloads')
+        return send_from_directory(directory, str(relative_path))
     
     return jsonify({"error": "Imagen no encontrada"}), 404
 

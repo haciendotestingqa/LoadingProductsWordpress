@@ -190,13 +190,19 @@ function renderPage(pageNum) {
     pageProducts.forEach((product, index) => {
         const globalIndex = startIndex + index;
         const row = createProductRow(product, globalIndex);
+        // Agregar clase para filas alternadas (zebra striping)
+        if (index % 2 === 0) {
+            row.classList.add('row-even');
+        } else {
+            row.classList.add('row-odd');
+        }
         tbody.appendChild(row);
     });
     
     // Actualizar controles de paginación
     updatePagination();
     
-    // Actualizar botón Preview
+    // Actualizar botón Preview y footer
     updatePreviewButton();
 }
 
@@ -285,9 +291,23 @@ function createProductRow(product, globalIndex) {
         imageWrapper.className = 'image-wrapper';
         
         const img = document.createElement('img');
-        img.src = `/yupoo_downloads/${product.collection}/${product.page}/${product.name}/${imageName}`;
+        // Construir la ruta codificando cada segmento correctamente
+        // Flask maneja automáticamente la decodificación, pero necesitamos codificar cada parte
+        const pathParts = [
+            'yupoo_downloads',
+            product.collection,
+            product.page,
+            product.name,
+            imageName
+        ];
+        // Codificar cada parte y unir con /
+        const encodedPath = pathParts.map(part => encodeURIComponent(part)).join('/');
+        img.src = `/${encodedPath}`;
         img.alt = imageName;
         img.className = 'product-thumbnail';
+        img.dataset.fullImage = img.src; // Guardar URL completa para el modal
+        // Event listener para abrir modal al hacer click
+        img.addEventListener('click', () => openImageModal(img.src));
         imageWrapper.appendChild(img);
         
         const checkboxesContainer = document.createElement('div');
@@ -307,6 +327,14 @@ function createProductRow(product, globalIndex) {
         }
         
         checkboxP.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                // Si se marca P, desmarcar G de la misma imagen
+                const checkboxG = document.getElementById(`g-${globalIndex}-${imageIndex}`);
+                if (checkboxG && checkboxG.checked) {
+                    checkboxG.checked = false;
+                    handleCheckboxG(globalIndex, imageIndex, false);
+                }
+            }
             handleCheckboxP(globalIndex, imageIndex, e.target.checked);
         });
         
@@ -331,6 +359,14 @@ function createProductRow(product, globalIndex) {
         }
         
         checkboxG.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                // Si se marca G, desmarcar P de la misma imagen
+                const checkboxP = document.getElementById(`p-${globalIndex}-${imageIndex}`);
+                if (checkboxP && checkboxP.checked) {
+                    checkboxP.checked = false;
+                    handleCheckboxP(globalIndex, imageIndex, false);
+                }
+            }
             handleCheckboxG(globalIndex, imageIndex, e.target.checked);
         });
         
@@ -527,7 +563,7 @@ function updatePagination() {
 }
 
 /**
- * Actualiza el estado del botón Preview.
+ * Actualiza el estado del botón Preview y muestra items incompletos.
  */
 function updatePreviewButton() {
     const previewBtn = document.getElementById('preview-btn');
@@ -535,22 +571,49 @@ function updatePreviewButton() {
     const endIndex = Math.min(startIndex + PRODUCTS_PER_PAGE, allProducts.length);
     
     // Validar que todos los productos tengan título, color y al menos un checkbox
-    let isValid = true;
+    const incompleteItems = [];
+    
     for (let i = startIndex; i < endIndex; i++) {
         const state = productStates[i];
-        if (!state || !state.title || !state.color) {
-            isValid = false;
-            break;
+        const itemNumber = i + 1;
+        const missingFields = [];
+        
+        if (!state || !state.title) {
+            missingFields.push('título');
         }
-        const hasCheckbox = (state.checkboxesP && state.checkboxesP.length > 0) ||
-                          (state.checkboxesG && state.checkboxesG.length > 0);
+        if (!state || !state.color) {
+            missingFields.push('color');
+        }
+        const hasCheckbox = (state && state.checkboxesP && state.checkboxesP.length > 0) ||
+                          (state && state.checkboxesG && state.checkboxesG.length > 0);
         if (!hasCheckbox) {
-            isValid = false;
-            break;
+            missingFields.push('imagen seleccionada');
+        }
+        
+        if (missingFields.length > 0) {
+            incompleteItems.push({
+                item: itemNumber,
+                fields: missingFields
+            });
         }
     }
     
+    const isValid = incompleteItems.length === 0;
     previewBtn.disabled = !isValid;
+    
+    // Mostrar/ocultar footer con items incompletos
+    const footer = document.getElementById('incomplete-items-footer');
+    const footerText = document.getElementById('incomplete-items-text');
+    
+    if (incompleteItems.length > 0) {
+        const itemsText = incompleteItems.map(item => {
+            return `Item ${item.item} (${item.fields.join(', ')})`;
+        }).join(', ');
+        footerText.textContent = `Faltan completar: ${itemsText}`;
+        footer.style.display = 'block';
+    } else {
+        footer.style.display = 'none';
+    }
 }
 
 /**
@@ -630,7 +693,54 @@ async function handlePreview() {
     }
 }
 
-// Event listeners
-document.addEventListener('DOMContentLoaded', init);
+/**
+ * Abre el modal con la imagen ampliada.
+ */
+function openImageModal(imageSrc) {
+    const modal = document.getElementById('image-modal');
+    const modalImg = document.getElementById('modal-image');
+    modalImg.src = imageSrc;
+    modal.style.display = 'block';
+}
 
-document.getElementById('preview-btn').addEventListener('click', handlePreview);
+/**
+ * Cierra el modal de imagen.
+ */
+function closeImageModal() {
+    const modal = document.getElementById('image-modal');
+    modal.style.display = 'none';
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', () => {
+    init();
+    
+    // Event listener para botón Preview
+    const previewBtn = document.getElementById('preview-btn');
+    if (previewBtn) {
+        previewBtn.addEventListener('click', handlePreview);
+    }
+    
+    // Event listeners para modal de imagen
+    const imageModal = document.getElementById('image-modal');
+    const closeBtn = document.querySelector('.image-modal-close');
+    
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeImageModal);
+    }
+    
+    if (imageModal) {
+        imageModal.addEventListener('click', (e) => {
+            if (e.target === imageModal) {
+                closeImageModal();
+            }
+        });
+    }
+    
+    // Cerrar modal con tecla ESC
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeImageModal();
+        }
+    });
+});

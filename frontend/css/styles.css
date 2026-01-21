@@ -119,8 +119,16 @@ tbody tr {
     transition: background-color 0.2s;
 }
 
+tbody tr.row-even {
+    background-color: var(--card-bg);
+}
+
+tbody tr.row-odd {
+    background-color: #f8f9fa;
+}
+
 tbody tr:hover {
-    background-color: var(--bg-color);
+    background-color: #e9ecef;
 }
 
 tbody td {
@@ -132,6 +140,7 @@ tbody td {
 .title-select,
 .color-select {
     width: 100%;
+    min-width: 200px;
     padding: 0.5rem;
     border: 1px solid var(--border-color);
     border-radius: 6px;
@@ -184,6 +193,7 @@ tbody td {
 .product-thumbnail:hover {
     transform: scale(1.05);
     box-shadow: var(--shadow-md);
+    border-color: var(--primary-color);
 }
 
 .checkboxes-container {
@@ -474,6 +484,76 @@ tbody td {
     }
     to {
         transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Footer con items incompletos */
+.incomplete-items-footer {
+    margin-top: 2rem;
+    padding: 1rem;
+    background: #fee2e2;
+    border: 2px solid var(--danger-color);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+}
+
+.incomplete-items-footer p {
+    margin: 0;
+    color: var(--danger-color);
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+/* Modal de imagen ampliada */
+.image-modal {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+    animation: fadeIn 0.3s;
+    cursor: pointer;
+}
+
+.image-modal-close {
+    position: absolute;
+    top: 20px;
+    right: 35px;
+    color: #f1f1f1;
+    font-size: 40px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: color 0.2s;
+    z-index: 2001;
+}
+
+.image-modal-close:hover {
+    color: white;
+}
+
+.modal-image-content {
+    margin: auto;
+    display: block;
+    width: auto;
+    max-width: 90%;
+    max-height: 90%;
+    margin-top: 5%;
+    animation: zoomIn 0.3s;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes zoomIn {
+    from {
+        transform: scale(0.5);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
         opacity: 1;
     }
 }
