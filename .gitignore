@@ -1,0 +1,20 @@
+# Archivos de entorno (contienen información sensible)
+.env
+
+# Entorno virtual
+venv/
+env/
+ENV/
+
+# Logs
+*.log
+
+# Archivos Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Descargas
+yupoo_downloads/
