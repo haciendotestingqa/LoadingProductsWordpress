@@ -691,14 +691,21 @@ async function handlePreview() {
             });
         }
         
+        // Validar que los datos del producto estén completos
+        if (!product.collection || !product.page || !product.name) {
+            console.error(`Producto en índice ${i} tiene datos incompletos:`, product);
+            alert(`Error: El producto en la posición ${i + 1} tiene datos incompletos. Por favor, verifica los datos.`);
+            return;
+        }
+        
         previewData.push({
             collection: product.collection,
             page: product.page,
             name: product.name,
             title: titleName,
             color: state.color,
-            productImage: productImage,
-            galleryImages: galleryImages
+            productImage: productImage || null,  // Asegurar que sea null si no hay imagen
+            galleryImages: galleryImages || []    // Asegurar que sea array vacío si no hay imágenes
         });
     }
     

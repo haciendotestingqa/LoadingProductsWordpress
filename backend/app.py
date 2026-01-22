@@ -108,9 +108,18 @@ def api_preview():
             product_image = product_data.get('productImage')  # Imagen con checkbox P
             gallery_images = product_data.get('galleryImages', [])  # Imágenes con checkbox G
             
+            # Validar que los campos requeridos no sean None
+            if not collection or not page or not product_name:
+                logger.error(f"Campos faltantes en producto: collection={collection}, page={page}, name={product_name}")
+                continue
+            
             # Construir rutas base
-            input_base = PROJECT_ROOT / "yupoo_downloads" / collection / page / product_name
-            output_base = PROJECT_ROOT / "imagenes_marca_agua" / collection / page / product_name
+            try:
+                input_base = PROJECT_ROOT / "yupoo_downloads" / collection / page / product_name
+                output_base = PROJECT_ROOT / "imagenes_marca_agua" / collection / page / product_name
+            except (TypeError, AttributeError) as e:
+                logger.error(f"Error al construir rutas para producto {product_name}: {str(e)}")
+                continue
             
             processed_product = {
                 "collection": collection,
@@ -123,33 +132,42 @@ def api_preview():
             }
             
             # Procesar imagen de producto (P)
-            if product_image:
-                input_path = input_base / product_image
-                output_path = output_base / product_image
-                
-                if input_path.exists():
-                    if apply_watermark(str(input_path), str(output_path)):
-                        # Ruta relativa para el frontend
-                        processed_product["productImage"] = f"imagenes_marca_agua/{collection}/{page}/{product_name}/{product_image}"
+            if product_image and product_image.strip():  # Verificar que no sea None ni vacío
+                try:
+                    input_path = input_base / product_image
+                    output_path = output_base / product_image
+                    
+                    if input_path.exists():
+                        if apply_watermark(str(input_path), str(output_path)):
+                            # Ruta relativa para el frontend
+                            processed_product["productImage"] = f"imagenes_marca_agua/{collection}/{page}/{product_name}/{product_image}"
+                        else:
+                            logger.warning(f"No se pudo aplicar marca de agua a {input_path}")
                     else:
-                        logger.warning(f"No se pudo aplicar marca de agua a {input_path}")
-                else:
-                    logger.warning(f"Imagen no encontrada: {input_path}")
+                        logger.warning(f"Imagen no encontrada: {input_path}")
+                except Exception as e:
+                    logger.error(f"Error al procesar imagen de producto {product_image}: {str(e)}")
             
             # Procesar imágenes de galería (G)
             for gallery_image in gallery_images:
-                input_path = input_base / gallery_image
-                output_path = output_base / gallery_image
-                
-                if input_path.exists():
-                    if apply_watermark(str(input_path), str(output_path)):
-                        processed_product["galleryImages"].append(
-                            f"imagenes_marca_agua/{collection}/{page}/{product_name}/{gallery_image}"
-                        )
+                if not gallery_image or not gallery_image.strip():  # Validar que no sea None ni vacío
+                    continue
+                try:
+                    input_path = input_base / gallery_image
+                    output_path = output_base / gallery_image
+                    
+                    if input_path.exists():
+                        if apply_watermark(str(input_path), str(output_path)):
+                            processed_product["galleryImages"].append(
+                                f"imagenes_marca_agua/{collection}/{page}/{product_name}/{gallery_image}"
+                            )
+                        else:
+                            logger.warning(f"No se pudo aplicar marca de agua a {input_path}")
                     else:
-                        logger.warning(f"No se pudo aplicar marca de agua a {input_path}")
-                else:
-                    logger.warning(f"Imagen no encontrada: {input_path}")
+                        logger.warning(f"Imagen no encontrada: {input_path}")
+                except Exception as e:
+                    logger.error(f"Error al procesar imagen de galería {gallery_image}: {str(e)}")
+                    continue
             
             processed_products.append(processed_product)
         
