@@ -51,7 +51,10 @@ function loadPreview() {
         tdProductImage.className = 'preview-images-cell';
         if (product.productImage) {
             const img = document.createElement('img');
-            img.src = `/${product.productImage}`;
+            // Encodear cada segmento del path para manejar caracteres especiales (#, caracteres chinos, etc.)
+            const pathSegments = product.productImage.split('/');
+            const encodedPath = pathSegments.map(segment => encodeURIComponent(segment)).join('/');
+            img.src = `/${encodedPath}`;
             img.alt = 'Imagen de producto';
             img.className = 'preview-thumbnail';
             img.addEventListener('click', () => openImageModal(img.src));
@@ -69,7 +72,10 @@ function loadPreview() {
             galleryContainer.className = 'preview-gallery-mini';
             product.galleryImages.forEach(imagePath => {
                 const img = document.createElement('img');
-                img.src = `/${imagePath}`;
+                // Encodear cada segmento del path para manejar caracteres especiales (#, caracteres chinos, etc.)
+                const pathSegments = imagePath.split('/');
+                const encodedPath = pathSegments.map(segment => encodeURIComponent(segment)).join('/');
+                img.src = `/${encodedPath}`;
                 img.alt = 'Imagen de galería';
                 img.className = 'preview-thumbnail';
                 img.addEventListener('click', () => openImageModal(img.src));
