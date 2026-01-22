@@ -21,7 +21,7 @@ report_lock = Lock()
 def load_report() -> Dict:
     """
     Carga el reporte desde el archivo JSON.
-    Si el archivo no existe, crea uno nuevo con estructura inicial.
+    Si el archivo no existe o está vacío, crea uno nuevo con estructura inicial.
     
     Returns:
         Dict con estructura: {"productos": [...]}
@@ -33,23 +33,48 @@ def load_report() -> Dict:
             save_report(initial_data)
             return initial_data
         
+        # Verificar si el archivo está vacío
+        if REPORT_FILE.stat().st_size == 0:
+            logger.info(f"Archivo de reporte está vacío. Inicializando con estructura correcta.")
+            initial_data = {"productos": []}
+            save_report(initial_data)
+            return initial_data
+        
         try:
             with open(REPORT_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+                content = f.read().strip()
+                
+                # Si el contenido está vacío o solo tiene espacios
+                if not content:
+                    logger.info(f"Archivo de reporte tiene contenido vacío. Inicializando.")
+                    initial_data = {"productos": []}
+                    save_report(initial_data)
+                    return initial_data
+                
+                # Intentar parsear el JSON
+                data = json.loads(content)
                 logger.info(f"Reporte cargado exitosamente. Total productos: {len(data.get('productos', []))}")
                 return data
+                
         except json.JSONDecodeError as e:
             logger.error(f"Error al decodificar JSON del reporte: {str(e)}")
-            # Si el archivo está corrupto, crear uno nuevo con backup del anterior
-            backup_path = REPORT_FILE.with_suffix('.json.backup')
-            if REPORT_FILE.exists():
+            # Solo crear backup si el archivo tiene contenido (no está vacío)
+            if REPORT_FILE.stat().st_size > 0:
+                backup_path = REPORT_FILE.with_suffix('.json.backup')
                 import shutil
                 shutil.copy(REPORT_FILE, backup_path)
                 logger.warning(f"Archivo de reporte corrupto. Backup creado en: {backup_path}")
-            return {"productos": []}
+            
+            # Inicializar con estructura correcta
+            initial_data = {"productos": []}
+            save_report(initial_data)
+            return initial_data
+            
         except Exception as e:
             logger.error(f"Error inesperado al cargar reporte: {str(e)}")
-            return {"productos": []}
+            initial_data = {"productos": []}
+            save_report(initial_data)
+            return initial_data
 
 
 def save_report(data: Dict) -> bool:
