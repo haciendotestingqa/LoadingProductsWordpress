@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte de Productos Procesados</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <style>
+        .reporte-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .reporte-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .reporte-header h1 {
+            margin: 0 0 10px 0;
+            font-size: 2rem;
+        }
+
+        .reporte-stats {
+            display: flex;
+            gap: 30px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 15px 25px;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+
+        .stat-card .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+
+        .reporte-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .btn-refresh {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.3s;
+        }
+
+        .btn-refresh:hover {
+            background: #5568d3;
+        }
+
+        .btn-refresh:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .auto-refresh-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .reporte-table-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .reporte-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .reporte-table thead {
+            background: #f8f9fa;
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        .reporte-table th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .reporte-table td {
+            padding: 15px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .reporte-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        .reporte-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .status-exitoso {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .product-url {
+            color: #667eea;
+            text-decoration: none;
+            word-break: break-all;
+        }
+
+        .product-url:hover {
+            text-decoration: underline;
+        }
+
+        .error-message {
+            color: #721c24;
+            font-style: italic;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+
+        .no-data-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .last-update {
+            text-align: right;
+            color: #6c757d;
+            font-size: 0.9rem;
+            margin-top: 15px;
+            padding: 10px 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="reporte-container">
+        <div class="reporte-header">
+            <h1>📊 Reporte de Productos Procesados</h1>
+            <p>Historial completo de productos publicados en WooCommerce</p>
+            
+            <div class="reporte-stats">
+                <div class="stat-card">
+                    <div class="stat-label">Total Procesados</div>
+                    <div class="stat-value" id="stat-total">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">✓ Exitosos</div>
+                    <div class="stat-value" id="stat-exitosos">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">✗ Errores</div>
+                    <div class="stat-value" id="stat-errores">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="reporte-controls">
+            <button id="btn-refresh" class="btn-refresh">
+                <span>🔄</span>
+                <span>Actualizar</span>
+            </button>
+            
+            <div class="auto-refresh-toggle">
+                <input type="checkbox" id="auto-refresh" checked>
+                <label for="auto-refresh">Auto-actualizar cada 10s</label>
+            </div>
+        </div>
+
+        <div class="reporte-table-container">
+            <div id="loading-container" class="loading">
+                <div class="spinner"></div>
+                <p>Cargando reporte...</p>
+            </div>
+
+            <div id="no-data-container" class="no-data" style="display: none;">
+                <div class="no-data-icon">📋</div>
+                <h3>No hay productos procesados aún</h3>
+                <p>Los productos procesados aparecerán aquí automáticamente</p>
+            </div>
+
+            <table id="reporte-table" class="reporte-table" style="display: none;">
+                <thead>
+                    <tr>
+                        <th style="width: 80px;">Número</th>
+                        <th style="width: 300px;">Título - Color</th>
+                        <th>URL del Producto</th>
+                        <th style="width: 180px;">Fecha de Publicación</th>
+                        <th style="width: 100px;">Estado</th>
+                    </tr>
+                </thead>
+                <tbody id="reporte-tbody">
+                    <!-- Se llena dinámicamente con JavaScript -->
+                </tbody>
+            </table>
+
+            <div class="last-update" id="last-update"></div>
+        </div>
+    </div>
+
+    <script src="/js/reporte.js"></script>
+</body>
+</html>

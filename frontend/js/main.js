@@ -980,6 +980,7 @@ async function handlePreview() {
             page: product.page,
             name: product.name,
             folderName: folderName,
+            productBaseId: state.title,  // ID del producto base en WooCommerce
             title: titleName,
             color: state.color,
             productImage: productImage || null,
@@ -1007,6 +1008,8 @@ async function handlePreview() {
                 collection: p.collection,
                 page: p.page,
                 name: p.name,
+                folderName: p.folderName,
+                productBaseId: p.productBaseId,
                 title: p.title,
                 color: p.color,
                 productImage: p.productImage ? `imagenes_marca_agua/${p.collection}/${p.page}/${p.folderName}/${p.productImage}` : null,

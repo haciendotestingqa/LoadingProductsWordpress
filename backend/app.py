@@ -10,6 +10,8 @@ import os
 from services.csv_service import load_titles
 from services.image_service import get_collections, get_products
 from services.watermark_service import apply_watermark
+from services.wordpress_service import process_product_publication
+from services.report_service import add_product_to_report, load_report
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -133,6 +135,8 @@ def api_preview():
                 "collection": collection,
                 "page": page,
                 "name": product_name,
+                "folderName": folder_name,
+                "productBaseId": product_data.get('productBaseId'),
                 "title": product_data.get('title'),
                 "color": product_data.get('color'),
                 "productImage": None,
@@ -192,16 +196,170 @@ def api_preview():
 @app.route('/api/process', methods=['POST'])
 def api_process():
     """
-    Endpoint para confirmar el procesamiento de un lote.
-    Por ahora solo retorna éxito para mostrar el popup.
+    Procesa un lote de productos y los publica en WordPress/WooCommerce.
+    
+    Flujo:
+    1. Recibe datos de productos desde el frontend
+    2. Para cada producto:
+       - Sube imágenes con marca de agua al Media Library
+       - Duplica el producto base en WooCommerce
+       - Actualiza el producto con título, imágenes y estado "publish"
+       - Registra resultado en reporte
+    3. Retorna resumen de procesamiento
+    
+    Body esperado:
+    {
+        "products": [
+            {
+                "productBaseId": 123,
+                "titulo": "Camiseta Básica",
+                "color": "Rojo",
+                "collection": "Trapstar系列",
+                "page": "2",
+                "folderName": "款号：703",
+                "productImage": "imagen.jpg",
+                "galleryImages": ["img1.jpg", "img2.jpg"]
+            },
+            ...
+        ]
+    }
     """
     try:
         data = request.get_json()
-        # Por ahora solo retornamos éxito
-        return jsonify({"success": True, "message": "Lote procesado correctamente"}), 200
+        if not data or 'products' not in data:
+            return jsonify({"success": False, "error": "Formato de datos inválido"}), 400
+        
+        products = data['products']
+        total_productos = len(products)
+        procesados_exitosos = 0
+        procesados_con_error = 0
+        
+        logger.info(f"Iniciando procesamiento de {total_productos} productos...")
+        
+        for idx, product_data in enumerate(products, 1):
+            try:
+                # Extraer datos del producto
+                product_base_id = product_data.get('productBaseId')
+                titulo = product_data.get('titulo')
+                color = product_data.get('color')
+                collection = product_data.get('collection')
+                page = product_data.get('page')
+                folder_name = product_data.get('folderName')
+                product_image = product_data.get('productImage')
+                gallery_images = product_data.get('galleryImages', [])
+                
+                # Validar datos requeridos
+                if not all([product_base_id, titulo, color, collection, page, folder_name, product_image]):
+                    logger.error(f"Producto {idx}: Datos incompletos")
+                    error_msg = f"ERROR: Datos incompletos en producto {idx}"
+                    add_product_to_report(
+                        titulo=f"{titulo} - {color}" if titulo and color else f"Producto {idx}",
+                        url=error_msg,
+                        estado="error"
+                    )
+                    procesados_con_error += 1
+                    continue
+                
+                # Construir rutas de imágenes con marca de agua
+                base_path = PROJECT_ROOT / "imagenes_marca_agua" / collection / page / folder_name
+                imagen_principal_path = str(base_path / product_image)
+                imagenes_galeria_paths = [str(base_path / img) for img in gallery_images]
+                
+                # Verificar que la imagen principal existe
+                if not Path(imagen_principal_path).exists():
+                    logger.error(f"Producto {idx}: Imagen principal no encontrada: {imagen_principal_path}")
+                    error_msg = f"ERROR: Imagen principal no encontrada"
+                    add_product_to_report(
+                        titulo=f"{titulo} - {color}",
+                        url=error_msg,
+                        estado="error"
+                    )
+                    procesados_con_error += 1
+                    continue
+                
+                logger.info(f"Procesando producto {idx}/{total_productos}: {titulo} - {color}")
+                
+                # Procesar publicación completa
+                result = process_product_publication(
+                    product_base_id=int(product_base_id),
+                    titulo=titulo,
+                    color=color,
+                    imagen_principal_path=imagen_principal_path,
+                    imagenes_galeria_paths=imagenes_galeria_paths
+                )
+                
+                # Registrar en reporte
+                if result["success"]:
+                    add_product_to_report(
+                        titulo=f"{titulo} - {color}",
+                        url=result["url"],
+                        estado="exitoso"
+                    )
+                    procesados_exitosos += 1
+                    logger.info(f"Producto {idx} procesado exitosamente: {result['url']}")
+                else:
+                    error_msg = f"ERROR: {result['error']}"
+                    add_product_to_report(
+                        titulo=f"{titulo} - {color}",
+                        url=error_msg,
+                        estado="error"
+                    )
+                    procesados_con_error += 1
+                    logger.error(f"Producto {idx} falló: {result['error']}")
+                
+            except Exception as e:
+                logger.error(f"Error inesperado al procesar producto {idx}: {str(e)}")
+                error_msg = f"ERROR: {str(e)}"
+                add_product_to_report(
+                    titulo=f"Producto {idx}",
+                    url=error_msg,
+                    estado="error"
+                )
+                procesados_con_error += 1
+        
+        # Resumen final
+        logger.info(f"Procesamiento completado: {procesados_exitosos} exitosos, {procesados_con_error} errores")
+        
+        return jsonify({
+            "success": True,
+            "processed": total_productos,
+            "exitosos": procesados_exitosos,
+            "errores": procesados_con_error,
+            "message": f"Lote procesado: {procesados_exitosos} exitosos, {procesados_con_error} errores"
+        }), 200
+        
     except Exception as e:
-        logger.error(f"Error al procesar: {str(e)}")
+        logger.error(f"Error general al procesar lote: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/reporte')
+def reporte():
+    """Servir página HTML del reporte."""
+    return send_from_directory(str(PROJECT_ROOT / 'frontend'), 'reporte.html')
+
+
+@app.route('/api/reporte-data', methods=['GET'])
+def api_reporte_data():
+    """
+    Retorna datos del reporte en formato JSON.
+    
+    Returns:
+        JSON con estructura: {"success": true, "productos": [...]}
+    """
+    try:
+        data = load_report()
+        return jsonify({
+            "success": True,
+            "productos": data.get("productos", [])
+        }), 200
+    except Exception as e:
+        logger.error(f"Error al cargar datos del reporte: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "productos": []
+        }), 500
 
 
 @app.route('/api/delete-product-folder', methods=['POST'])

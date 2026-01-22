@@ -45,11 +45,46 @@ header {
     margin-bottom: 2rem;
 }
 
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2rem;
+    flex-wrap: wrap;
+}
+
 header h1 {
     font-size: 2rem;
     font-weight: 700;
     color: var(--text-primary);
     text-align: center;
+    flex: 1;
+}
+
+/* Botón de reporte */
+.btn-reporte {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3);
+    white-space: nowrap;
+}
+
+.btn-reporte:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-reporte:active {
+    transform: translateY(0);
 }
 
 /* Selector de colección */

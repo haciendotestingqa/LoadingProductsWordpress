@@ -40,3 +40,9 @@ imagenes_marca_agua/
 *.nef
 *.orf
 *.sr2
+
+# Reporte de productos procesados
+reporte.json
+
+# Documentación de implementación
+FASE2_IMPLEMENTACION.md

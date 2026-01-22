@@ -143,20 +143,68 @@ function closeImageModal() {
  */
 async function handleProcess() {
     try {
+        // Obtener datos de productos desde sessionStorage
+        const previewDataStr = sessionStorage.getItem('previewData');
+        if (!previewDataStr) {
+            alert('No hay datos de productos para procesar');
+            return;
+        }
+        
+        const previewData = JSON.parse(previewDataStr);
+        
+        // Validar que hay productos
+        if (previewData.length === 0) {
+            alert('No hay productos para procesar');
+            return;
+        }
+        
+        // Preparar datos para el backend
+        const productsToProcess = previewData.map(p => {
+            // Extraer solo el nombre del archivo de las rutas completas
+            const productImageName = p.productImage ? p.productImage.split('/').pop() : null;
+            const galleryImagesNames = p.galleryImages.map(img => img.split('/').pop());
+            
+            return {
+                productBaseId: p.productBaseId,
+                titulo: p.title,
+                color: p.color,
+                collection: p.collection,
+                page: p.page,
+                folderName: p.folderName,
+                productImage: productImageName,
+                galleryImages: galleryImagesNames
+            };
+        });
+        
+        // Deshabilitar botón durante procesamiento
+        const processBtn = document.getElementById('process-btn');
+        processBtn.disabled = true;
+        processBtn.textContent = 'Procesando...';
+        
+        // Mostrar mensaje de procesamiento
+        showModal('Procesando productos...\nEsto puede tomar varios minutos.');
+        
+        // Enviar al backend
         const response = await fetch('/api/process', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ processed: true })
+            body: JSON.stringify({ products: productsToProcess })
         });
         
         const data = await response.json();
+        
+        // Habilitar botón nuevamente
+        processBtn.disabled = false;
+        processBtn.textContent = 'Procesar';
+        
         if (data.success) {
-            // Mostrar modal con mensaje
-            showModal('Lote de 25 imágenes procesado');
+            // Mostrar modal con resultado
+            const mensaje = `Lote procesado exitosamente\n\n✓ Exitosos: ${data.exitosos}\n✗ Errores: ${data.errores}\n\nTotal: ${data.processed} productos`;
+            showModal(mensaje);
             
-            // Después de 2 segundos, navegar a la siguiente página
+            // Después de 3 segundos, navegar a la siguiente página
             setTimeout(() => {
                 // Calcular siguiente página desde sessionStorage
                 const savedPage = parseInt(sessionStorage.getItem('currentPage')) || 1;
@@ -168,13 +216,19 @@ async function handleProcess() {
                 
                 // Navegar de vuelta a index.html con parámetro de página
                 window.location.href = `/?page=${nextPage}`;
-            }, 2000);
+            }, 3000);
         } else {
-            alert('Error al procesar: ' + (data.error || 'Error desconocido'));
+            showModal(`Error al procesar lote:\n${data.error || 'Error desconocido'}`);
         }
     } catch (error) {
         console.error('Error al procesar:', error);
-        alert('Error al procesar. Por favor, intenta de nuevo.');
+        
+        // Habilitar botón nuevamente
+        const processBtn = document.getElementById('process-btn');
+        processBtn.disabled = false;
+        processBtn.textContent = 'Procesar';
+        
+        showModal('Error al procesar. Por favor, intenta de nuevo.');
     }
 }
 
@@ -184,7 +238,8 @@ async function handleProcess() {
 function showModal(message) {
     const modal = document.getElementById('modal');
     const modalMessage = document.getElementById('modal-message');
-    modalMessage.textContent = message;
+    // Usar innerHTML para soportar saltos de línea
+    modalMessage.innerHTML = message.replace(/\n/g, '<br>');
     modal.style.display = 'block';
     
     // Cerrar modal al hacer clic en X
