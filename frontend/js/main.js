@@ -10,6 +10,7 @@ let selectedCollection = null;
 let currentPage = 1;
 const PRODUCTS_PER_PAGE = 25;
 let productStates = {}; // Estado de cada producto: {title, color, checkboxes}
+let duplicateCounters = {}; // Contador de duplicados por producto original: {productKey: count}
 
 // Colores predefinidos
 const COLORS = [
@@ -38,6 +39,9 @@ async function init() {
         
         // 4. Restaurar estado desde LocalStorage
         restoreState();
+        
+        // 4.5. Cargar contadores de duplicados
+        loadDuplicateCounters();
         
         // 5. Obtener página desde URL o usar 1
         const urlParams = new URLSearchParams(window.location.search);
@@ -497,12 +501,74 @@ function handleCheckboxG(productIndex, imageIndex, checked) {
 }
 
 /**
+ * Genera una clave única para un producto basado en su información original.
+ */
+function getProductKey(product) {
+    return `${product.collection}|${product.page}|${product.name}`;
+}
+
+/**
+ * Obtiene el contador de duplicados para un producto.
+ */
+function getDuplicateCount(product) {
+    const key = getProductKey(product);
+    return duplicateCounters[key] || 0;
+}
+
+/**
+ * Incrementa el contador de duplicados para un producto.
+ */
+function incrementDuplicateCount(product) {
+    const key = getProductKey(product);
+    if (!duplicateCounters[key]) {
+        duplicateCounters[key] = 0;
+    }
+    duplicateCounters[key]++;
+    // Guardar contadores en LocalStorage
+    saveDuplicateCounters();
+    return duplicateCounters[key];
+}
+
+/**
+ * Guarda los contadores de duplicados en LocalStorage.
+ */
+function saveDuplicateCounters() {
+    try {
+        localStorage.setItem('yupoo_duplicate_counters', JSON.stringify(duplicateCounters));
+    } catch (e) {
+        console.error('Error al guardar contadores de duplicados:', e);
+    }
+}
+
+/**
+ * Carga los contadores de duplicados desde LocalStorage.
+ */
+function loadDuplicateCounters() {
+    try {
+        const stored = localStorage.getItem('yupoo_duplicate_counters');
+        duplicateCounters = stored ? JSON.parse(stored) : {};
+    } catch (e) {
+        console.error('Error al cargar contadores de duplicados:', e);
+        duplicateCounters = {};
+    }
+}
+
+/**
  * Duplica una fila de producto.
  */
 function handleDuplicate(productIndex) {
     // Insertar el mismo producto después del actual
     const product = allProducts[productIndex];
-    allProducts.splice(productIndex + 1, 0, product);
+    const duplicatedProduct = {...product}; // Copia del producto
+    
+    // Incrementar contador de duplicados para este producto original
+    const duplicateCount = incrementDuplicateCount(product);
+    
+    // Guardar el contador de duplicados en el producto duplicado
+    duplicatedProduct._duplicateCount = duplicateCount;
+    duplicatedProduct._originalKey = getProductKey(product);
+    
+    allProducts.splice(productIndex + 1, 0, duplicatedProduct);
     
     // Guardar la lista completa de productos (incluyendo duplicados)
     saveProductsList(allProducts);
@@ -653,6 +719,36 @@ function updatePreviewButton() {
 }
 
 /**
+ * Muestra la barra de progreso.
+ */
+function showProgressBar() {
+    const progressContainer = document.getElementById('progress-bar-container');
+    const progressFill = document.getElementById('progress-bar-fill');
+    const progressPercentage = document.getElementById('progress-percentage');
+    progressContainer.style.display = 'block';
+    progressFill.style.width = '0%';
+    progressPercentage.textContent = '0%';
+}
+
+/**
+ * Actualiza la barra de progreso.
+ */
+function updateProgressBar(percentage) {
+    const progressFill = document.getElementById('progress-bar-fill');
+    const progressPercentage = document.getElementById('progress-percentage');
+    progressFill.style.width = percentage + '%';
+    progressPercentage.textContent = Math.round(percentage) + '%';
+}
+
+/**
+ * Oculta la barra de progreso.
+ */
+function hideProgressBar() {
+    const progressContainer = document.getElementById('progress-bar-container');
+    progressContainer.style.display = 'none';
+}
+
+/**
  * Maneja el clic en el botón Preview.
  */
 async function handlePreview() {
@@ -698,16 +794,53 @@ async function handlePreview() {
             return;
         }
         
+        // Determinar el nombre de la carpeta para duplicados
+        let folderName = product.name;
+        if (product._duplicateCount) {
+            // Si es un duplicado, agregar sufijo
+            if (product._duplicateCount === 1) {
+                folderName = product.name + '_copy';
+            } else {
+                folderName = product.name + '_copy' + product._duplicateCount;
+            }
+        }
+        
         previewData.push({
             collection: product.collection,
             page: product.page,
             name: product.name,
+            folderName: folderName,  // Nombre de carpeta con sufijo si es duplicado
             title: titleName,
             color: state.color,
-            productImage: productImage || null,  // Asegurar que sea null si no hay imagen
-            galleryImages: galleryImages || []    // Asegurar que sea array vacío si no hay imágenes
+            productImage: productImage || null,
+            galleryImages: galleryImages || []
         });
     }
+    
+    // Calcular total de imágenes a procesar para la barra de progreso
+    let totalImages = 0;
+    previewData.forEach(product => {
+        if (product.productImage) totalImages++;
+        totalImages += product.galleryImages.length;
+    });
+    
+    // Mostrar barra de progreso
+    showProgressBar();
+    
+    // Deshabilitar botón Preview
+    const previewBtn = document.getElementById('preview-btn');
+    previewBtn.disabled = true;
+    
+    // Simular progreso mientras se procesa
+    let processedImages = 0;
+    const progressInterval = setInterval(() => {
+        // Simular progreso (no es real, pero da feedback visual)
+        if (processedImages < totalImages * 0.9) {
+            processedImages += 2;
+            const percentage = (processedImages / totalImages) * 100;
+            updateProgressBar(Math.min(percentage, 90));
+        }
+    }, 100);
     
     // Enviar al backend para procesar marca de agua
     try {
@@ -719,18 +852,32 @@ async function handlePreview() {
             body: JSON.stringify({ products: previewData })
         });
         
+        clearInterval(progressInterval);
+        updateProgressBar(100);
+        
         const data = await response.json();
         if (data.success) {
-            // Guardar datos en sessionStorage para la página de preview
-            sessionStorage.setItem('previewData', JSON.stringify(data.products));
-            // Guardar página actual
-            sessionStorage.setItem('currentPage', currentPage.toString());
-            // Navegar a preview.html
-            window.location.href = '/preview.html';
+            // Esperar un momento para que se vea el 100%
+            setTimeout(() => {
+                hideProgressBar();
+                previewBtn.disabled = false;
+                
+                // Guardar datos en sessionStorage para la página de preview
+                sessionStorage.setItem('previewData', JSON.stringify(data.products));
+                // Guardar página actual
+                sessionStorage.setItem('currentPage', currentPage.toString());
+                // Navegar a preview.html
+                window.location.href = '/preview.html';
+            }, 500);
         } else {
+            hideProgressBar();
+            previewBtn.disabled = false;
             alert('Error al procesar el preview: ' + (data.error || 'Error desconocido'));
         }
     } catch (error) {
+        clearInterval(progressInterval);
+        hideProgressBar();
+        previewBtn.disabled = false;
         console.error('Error al enviar preview:', error);
         alert('Error al procesar el preview. Por favor, intenta de nuevo.');
     }

@@ -105,6 +105,7 @@ def api_preview():
             collection = product_data.get('collection')
             page = product_data.get('page')
             product_name = product_data.get('name')
+            folder_name = product_data.get('folderName', product_name)  # Usar folderName si existe (para duplicados)
             product_image = product_data.get('productImage')  # Imagen con checkbox P
             gallery_images = product_data.get('galleryImages', [])  # Imágenes con checkbox G
             
@@ -116,7 +117,7 @@ def api_preview():
             # Construir rutas base
             try:
                 input_base = PROJECT_ROOT / "yupoo_downloads" / collection / page / product_name
-                output_base = PROJECT_ROOT / "imagenes_marca_agua" / collection / page / product_name
+                output_base = PROJECT_ROOT / "imagenes_marca_agua" / collection / page / folder_name
             except (TypeError, AttributeError) as e:
                 logger.error(f"Error al construir rutas para producto {product_name}: {str(e)}")
                 continue
@@ -139,8 +140,8 @@ def api_preview():
                     
                     if input_path.exists():
                         if apply_watermark(str(input_path), str(output_path)):
-                            # Ruta relativa para el frontend
-                            processed_product["productImage"] = f"imagenes_marca_agua/{collection}/{page}/{product_name}/{product_image}"
+                            # Ruta relativa para el frontend usando folder_name
+                            processed_product["productImage"] = f"imagenes_marca_agua/{collection}/{page}/{folder_name}/{product_image}"
                         else:
                             logger.warning(f"No se pudo aplicar marca de agua a {input_path}")
                     else:
@@ -159,7 +160,7 @@ def api_preview():
                     if input_path.exists():
                         if apply_watermark(str(input_path), str(output_path)):
                             processed_product["galleryImages"].append(
-                                f"imagenes_marca_agua/{collection}/{page}/{product_name}/{gallery_image}"
+                                f"imagenes_marca_agua/{collection}/{page}/{folder_name}/{gallery_image}"
                             )
                         else:
                             logger.warning(f"No se pudo aplicar marca de agua a {input_path}")

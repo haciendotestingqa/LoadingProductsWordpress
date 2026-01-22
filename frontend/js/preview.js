@@ -3,84 +3,133 @@
  */
 
 /**
- * Carga y renderiza el preview de productos.
+ * Carga y renderiza el preview de productos en formato tabla.
  */
 function loadPreview() {
-    const previewContent = document.getElementById('preview-content');
+    const previewTbody = document.getElementById('preview-tbody');
     
     // Obtener datos desde sessionStorage
     const previewDataStr = sessionStorage.getItem('previewData');
     if (!previewDataStr) {
-        previewContent.innerHTML = '<p>No hay datos de preview disponibles.</p>';
+        previewTbody.innerHTML = '<tr><td colspan="4">No hay datos de preview disponibles.</td></tr>';
         return;
     }
     
     const previewData = JSON.parse(previewDataStr);
     
     if (previewData.length === 0) {
-        previewContent.innerHTML = '<p>No hay productos para mostrar.</p>';
+        previewTbody.innerHTML = '<tr><td colspan="4">No hay productos para mostrar.</td></tr>';
         return;
     }
     
-    // Renderizar cada producto
-    previewContent.innerHTML = '';
+    // Limpiar tabla
+    previewTbody.innerHTML = '';
     
+    // Renderizar cada producto como fila de tabla
     previewData.forEach((product, index) => {
-        const productCard = document.createElement('div');
-        productCard.className = 'preview-product-card';
+        const tr = document.createElement('tr');
         
-        // Título combinado
-        const title = document.createElement('h2');
-        title.className = 'preview-product-title';
-        title.textContent = `${product.title} - ${product.color}`;
-        productCard.appendChild(title);
+        // Agregar clase para filas alternadas
+        if (index % 2 === 0) {
+            tr.classList.add('row-even');
+        } else {
+            tr.classList.add('row-odd');
+        }
         
-        // Imagen de producto (P)
+        // Columna Item
+        const tdItem = document.createElement('td');
+        tdItem.textContent = index + 1;
+        tr.appendChild(tdItem);
+        
+        // Columna Título - Color
+        const tdTitle = document.createElement('td');
+        tdTitle.textContent = `${product.title} - ${product.color}`;
+        tr.appendChild(tdTitle);
+        
+        // Columna Imagen de Producto
+        const tdProductImage = document.createElement('td');
+        tdProductImage.className = 'preview-images-cell';
         if (product.productImage) {
-            const productImageDiv = document.createElement('div');
-            productImageDiv.className = 'preview-image-section';
-            
-            const label = document.createElement('p');
-            label.className = 'image-label';
-            label.textContent = 'Imagen de Producto:';
-            productImageDiv.appendChild(label);
-            
             const img = document.createElement('img');
             img.src = `/${product.productImage}`;
             img.alt = 'Imagen de producto';
-            img.className = 'preview-image';
-            productImageDiv.appendChild(img);
-            
-            productCard.appendChild(productImageDiv);
+            img.className = 'preview-thumbnail';
+            img.addEventListener('click', () => openImageModal(img.src));
+            tdProductImage.appendChild(img);
+        } else {
+            tdProductImage.textContent = '-';
         }
+        tr.appendChild(tdProductImage);
         
-        // Imágenes de galería (G)
+        // Columna Galería de Productos
+        const tdGallery = document.createElement('td');
+        tdGallery.className = 'preview-images-cell';
         if (product.galleryImages && product.galleryImages.length > 0) {
-            const galleryDiv = document.createElement('div');
-            galleryDiv.className = 'preview-gallery-section';
-            
-            const label = document.createElement('p');
-            label.className = 'image-label';
-            label.textContent = 'Galería de Productos:';
-            galleryDiv.appendChild(label);
-            
             const galleryContainer = document.createElement('div');
-            galleryContainer.className = 'preview-gallery-container';
-            
+            galleryContainer.className = 'preview-gallery-mini';
             product.galleryImages.forEach(imagePath => {
                 const img = document.createElement('img');
                 img.src = `/${imagePath}`;
                 img.alt = 'Imagen de galería';
-                img.className = 'preview-image preview-gallery-image';
+                img.className = 'preview-thumbnail';
+                img.addEventListener('click', () => openImageModal(img.src));
                 galleryContainer.appendChild(img);
             });
-            
-            galleryDiv.appendChild(galleryContainer);
-            productCard.appendChild(galleryDiv);
+            tdGallery.appendChild(galleryContainer);
+        } else {
+            tdGallery.textContent = '-';
         }
+        tr.appendChild(tdGallery);
         
-        previewContent.appendChild(productCard);
+        previewTbody.appendChild(tr);
     });
+}
+
+/**
+ * Abre el modal con la imagen ampliada (reutilizar función de main.js si es posible).
+ */
+function openImageModal(imageSrc) {
+    // Crear modal si no existe
+    let modal = document.getElementById('image-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'image-modal';
+        modal.className = 'image-modal';
+        modal.style.display = 'none';
+        
+        const closeBtn = document.createElement('span');
+        closeBtn.className = 'image-modal-close';
+        closeBtn.innerHTML = '&times;';
+        closeBtn.addEventListener('click', () => closeImageModal());
+        
+        const img = document.createElement('img');
+        img.id = 'modal-image';
+        img.className = 'modal-image-content';
+        
+        modal.appendChild(closeBtn);
+        modal.appendChild(img);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeImageModal();
+            }
+        });
+        
+        document.body.appendChild(modal);
+    }
+    
+    const modalImg = document.getElementById('modal-image');
+    modalImg.src = imageSrc;
+    modal.style.display = 'block';
+}
+
+/**
+ * Cierra el modal de imagen.
+ */
+function closeImageModal() {
+    const modal = document.getElementById('image-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
 }
 
 /**
