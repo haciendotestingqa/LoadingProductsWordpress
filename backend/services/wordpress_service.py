@@ -25,7 +25,7 @@ MAX_RETRIES = 3
 RETRY_DELAY = 2.0
 
 
-def upload_image_to_media(image_path: str, filename: str) -> Optional[str]:
+def upload_image_to_media(image_path: str, filename: str) -> Optional[int]:
     """
     Sube una imagen al Media Library de WordPress.
     
@@ -34,7 +34,7 @@ def upload_image_to_media(image_path: str, filename: str) -> Optional[str]:
         filename: Nombre del archivo a subir
     
     Returns:
-        URL de la imagen subida (source_url) o None si falla
+        ID del attachment en WordPress Media Library o None si falla
     """
     if not WORDPRESS_PASS:
         logger.error("WORDPRESS_PASS no está configurado en .env")
@@ -68,9 +68,10 @@ def upload_image_to_media(image_path: str, filename: str) -> Optional[str]:
             
             if response.status_code == 201:
                 data = response.json()
+                attachment_id = data.get('id')
                 source_url = data.get('source_url')
-                logger.info(f"Imagen subida exitosamente: {filename} -> {source_url}")
-                return source_url
+                logger.info(f"Imagen subida exitosamente: {filename} -> {source_url} (ID: {attachment_id})")
+                return attachment_id  # Retornar ID en lugar de URL
             else:
                 logger.warning(f"Error al subir imagen (intento {attempt + 1}/{MAX_RETRIES}): {response.status_code} - {response.text[:200]}")
                 
@@ -136,14 +137,14 @@ def duplicate_product(product_id: int) -> Optional[int]:
         return None
 
 
-def update_product(product_id: int, name: str, images: List[Dict[str, str]]) -> Optional[str]:
+def update_product(product_id: int, name: str, images: List[Dict[str, int]]) -> Optional[str]:
     """
     Actualiza un producto en WooCommerce con nombre, estado e imágenes.
     
     Args:
         product_id: ID del producto a actualizar
         name: Nombre del producto en formato "TITULO - COLOR"
-        images: Lista de diccionarios con formato [{"src": "url"}, ...]
+        images: Lista de diccionarios con formato [{"id": attachment_id}, ...]
                 El primer elemento es la imagen principal, el resto son galería
     
     Returns:
@@ -218,9 +219,9 @@ def process_product_publication(
     try:
         # 1. Subir imagen principal
         filename_principal = Path(imagen_principal_path).name
-        source_url_principal = upload_image_to_media(imagen_principal_path, filename_principal)
+        attachment_id_principal = upload_image_to_media(imagen_principal_path, filename_principal)
         
-        if not source_url_principal:
+        if not attachment_id_principal:
             return {
                 "success": False,
                 "url": None,
@@ -228,20 +229,20 @@ def process_product_publication(
             }
         
         # 2. Subir imágenes de galería
-        source_urls_galeria = []
+        attachment_ids_galeria = []
         for galeria_path in imagenes_galeria_paths:
             filename_galeria = Path(galeria_path).name
-            source_url_galeria = upload_image_to_media(galeria_path, filename_galeria)
+            attachment_id_galeria = upload_image_to_media(galeria_path, filename_galeria)
             
-            if source_url_galeria:
-                source_urls_galeria.append(source_url_galeria)
+            if attachment_id_galeria:
+                attachment_ids_galeria.append(attachment_id_galeria)
             else:
                 logger.warning(f"No se pudo subir imagen de galería: {galeria_path}")
         
-        # 3. Construir array de imágenes para WooCommerce
-        images = [{"src": source_url_principal}]
-        for url_galeria in source_urls_galeria:
-            images.append({"src": url_galeria})
+        # 3. Construir array de imágenes para WooCommerce usando IDs
+        images = [{"id": attachment_id_principal}]
+        for attachment_id_galeria in attachment_ids_galeria:
+            images.append({"id": attachment_id_galeria})
         
         # 4. Duplicar producto base
         new_product_id = duplicate_product(product_base_id)
