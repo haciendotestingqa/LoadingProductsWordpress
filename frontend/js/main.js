@@ -678,7 +678,7 @@ async function handleDelete(productIndex) {
         // Actualizar total de productos
         sessionStorage.setItem('totalProducts', allProducts.length.toString());
         
-        // Re-renderizar página actual
+        // Re-renderizar página actual (esto también actualizará los indicadores)
         renderPage(currentPage);
     }
 }
@@ -708,6 +708,74 @@ function updatePagination() {
             renderPage(currentPage + 1);
         }
     };
+    
+    // Renderizar indicadores de páginas
+    renderPageIndicators();
+}
+
+/**
+ * Genera los indicadores visuales de estado de páginas en el footer.
+ */
+function renderPageIndicators() {
+    const totalPages = Math.ceil(allProducts.length / PRODUCTS_PER_PAGE);
+    const indicatorsContainer = document.getElementById('pages-indicators');
+    const processedCountSpan = document.getElementById('processed-count');
+    
+    if (!indicatorsContainer) return;
+    
+    indicatorsContainer.innerHTML = '';
+    
+    // Contar páginas procesadas
+    let processedPages = 0;
+    
+    for (let page = 1; page <= totalPages; page++) {
+        const startIndex = (page - 1) * PRODUCTS_PER_PAGE;
+        const endIndex = Math.min(startIndex + PRODUCTS_PER_PAGE, allProducts.length);
+        
+        // Verificar si todos los productos de esta página están procesados
+        let allProcessed = true;
+        for (let i = startIndex; i < endIndex; i++) {
+            const processedState = loadProcessedState(i);
+            if (!processedState) {
+                allProcessed = false;
+                break;
+            }
+        }
+        
+        if (allProcessed) {
+            processedPages++;
+        }
+        
+        // Crear indicador
+        const indicator = document.createElement('div');
+        indicator.className = 'page-indicator';
+        indicator.textContent = page;
+        indicator.dataset.page = page;
+        indicator.setAttribute('title', `Ir a página ${page}`);
+        
+        // Agregar clases según estado
+        if (page === currentPage) {
+            indicator.classList.add('current');
+        } else if (allProcessed) {
+            indicator.classList.add('processed');
+        } else {
+            indicator.classList.add('pending');
+        }
+        
+        // Agregar evento click para navegar
+        indicator.addEventListener('click', () => {
+            if (page !== currentPage) {
+                renderPage(page);
+            }
+        });
+        
+        indicatorsContainer.appendChild(indicator);
+    }
+    
+    // Actualizar contador
+    if (processedCountSpan) {
+        processedCountSpan.textContent = `${processedPages} de ${totalPages} procesadas`;
+    }
 }
 
 /**
@@ -1000,6 +1068,9 @@ async function handlePreview() {
                     checkboxesG: state.checkboxesG || []
                 });
             }
+            
+            // Actualizar los indicadores de página para mostrar que esta página fue procesada
+            renderPageIndicators();
             
             // Esperar un momento para que se vea el 100%
             setTimeout(() => {

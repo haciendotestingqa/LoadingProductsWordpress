@@ -38,13 +38,6 @@
             </table>
         </div>
 
-        <!-- Controles de paginación -->
-        <div class="pagination">
-            <button id="prev-page" class="btn-pagination" disabled>Anterior</button>
-            <span id="page-info">Página 1 de 1</span>
-            <button id="next-page" class="btn-pagination" disabled>Siguiente</button>
-        </div>
-
         <!-- Botón Preview -->
         <div class="preview-section">
             <button id="preview-btn" class="btn-preview" disabled>Preview</button>
@@ -61,7 +54,48 @@
             </div>
         </div>
 
-        <!-- Footer con items incompletos -->
+        <!-- Footer con navegación y estado de páginas -->
+        <footer class="app-footer">
+            <div class="footer-container">
+                <!-- Navegación de páginas -->
+                <div class="footer-navigation">
+                    <button id="prev-page" class="btn-pagination" disabled>
+                        <span class="btn-icon">←</span>
+                        <span>Anterior</span>
+                    </button>
+                    
+                    <div class="page-info-container">
+                        <span id="page-info" class="page-info">Página 1 de 1</span>
+                        <span id="processed-count" class="processed-count">0 de 0 procesadas</span>
+                    </div>
+                    
+                    <button id="next-page" class="btn-pagination" disabled>
+                        <span>Siguiente</span>
+                        <span class="btn-icon">→</span>
+                    </button>
+                </div>
+                
+                <!-- Indicadores de estado de páginas -->
+                <div class="pages-status-footer">
+                    <div class="pages-status-header">
+                        <span class="status-title">Estado de todas las páginas:</span>
+                        <span class="status-legend">
+                            <span class="legend-item"><span class="legend-dot current"></span> Actual</span>
+                            <span class="legend-item"><span class="legend-dot processed"></span> Procesada</span>
+                            <span class="legend-item"><span class="legend-dot pending"></span> Pendiente</span>
+                        </span>
+                    </div>
+                    <div id="pages-indicators" class="pages-indicators-footer">
+                        <!-- Se genera dinámicamente con JavaScript -->
+                    </div>
+                    <div class="footer-hint">
+                        💡 Click en cualquier número para navegar a esa página
+                    </div>
+                </div>
+            </div>
+        </footer>
+
+        <!-- Footer con items incompletos (se muestra cuando hay errores) -->
         <div id="incomplete-items-footer" class="incomplete-items-footer" style="display: none;">
             <p id="incomplete-items-text"></p>
         </div>
