@@ -122,3 +122,43 @@ function loadProductState(productIndex) {
     }
     return null;
 }
+
+/**
+ * Guarda el estado procesado de las imágenes con marca de agua.
+ * Esto permite detectar cambios en los checkboxes.
+ * @param {number} productIndex - Índice del producto
+ * @param {Object} processedState - Estado procesado (checkboxesP, checkboxesG)
+ */
+function saveProcessedState(productIndex, processedState) {
+    const state = loadState() || {};
+    if (!state.processed) {
+        state.processed = {};
+    }
+    state.processed[productIndex] = processedState;
+    saveState(state);
+}
+
+/**
+ * Carga el estado procesado de un producto.
+ * @param {number} productIndex - Índice del producto
+ * @returns {Object|null} Estado procesado o null
+ */
+function loadProcessedState(productIndex) {
+    const state = loadState();
+    if (state && state.processed && state.processed[productIndex]) {
+        return state.processed[productIndex];
+    }
+    return null;
+}
+
+/**
+ * Elimina el estado procesado de un producto (cuando se borra).
+ * @param {number} productIndex - Índice del producto
+ */
+function removeProcessedState(productIndex) {
+    const state = loadState() || {};
+    if (state.processed && state.processed[productIndex]) {
+        delete state.processed[productIndex];
+        saveState(state);
+    }
+}

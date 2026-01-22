@@ -602,8 +602,38 @@ function handleDuplicate(productIndex) {
 /**
  * Elimina una fila de producto.
  */
-function handleDelete(productIndex) {
+async function handleDelete(productIndex) {
     if (confirm('¿Estás seguro de que deseas eliminar este producto?')) {
+        const product = allProducts[productIndex];
+        
+        // Determinar el nombre de la carpeta para duplicados
+        let folderName = product.name;
+        if (product._duplicateCount) {
+            if (product._duplicateCount === 1) {
+                folderName = product.name + '_copy';
+            } else {
+                folderName = product.name + '_copy' + product._duplicateCount;
+            }
+        }
+        
+        // Llamar al backend para eliminar la carpeta del producto
+        try {
+            await fetch('/api/delete-product-folder', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    collection: product.collection,
+                    page: product.page,
+                    folderName: folderName
+                })
+            });
+        } catch (error) {
+            console.error('Error al eliminar carpeta del producto:', error);
+            // Continuamos con la eliminación aunque falle el borrado de la carpeta
+        }
+        
         // Eliminar producto
         allProducts.splice(productIndex, 1);
         
@@ -612,6 +642,9 @@ function handleDelete(productIndex) {
         
         // Actualizar índices de estados
         const newStates = {};
+        const newProcessedStates = {};
+        const state = loadState() || {};
+        
         Object.keys(productStates).forEach(key => {
             const idx = parseInt(key);
             if (idx < productIndex) {
@@ -622,11 +655,24 @@ function handleDelete(productIndex) {
             // idx === productIndex se omite (se elimina)
         });
         
+        // También actualizar índices de estados procesados
+        if (state.processed) {
+            Object.keys(state.processed).forEach(key => {
+                const idx = parseInt(key);
+                if (idx < productIndex) {
+                    newProcessedStates[key] = state.processed[key];
+                } else if (idx > productIndex) {
+                    newProcessedStates[idx - 1] = state.processed[key];
+                }
+                // idx === productIndex se omite (se elimina)
+            });
+        }
+        
         productStates = newStates;
         
         // Guardar estado completo
-        const state = loadState() || {};
         state.products = productStates;
+        state.processed = newProcessedStates;
         saveState(state);
         
         // Actualizar total de productos
@@ -672,7 +718,7 @@ function updatePreviewButton() {
     const startIndex = (currentPage - 1) * PRODUCTS_PER_PAGE;
     const endIndex = Math.min(startIndex + PRODUCTS_PER_PAGE, allProducts.length);
     
-    // Validar que todos los productos tengan título, color y al menos un checkbox
+    // Validar que todos los productos tengan título, color y checkbox P obligatorio
     const incompleteItems = [];
     
     for (let i = startIndex; i < endIndex; i++) {
@@ -686,10 +732,10 @@ function updatePreviewButton() {
         if (!state || !state.color) {
             missingFields.push('color');
         }
-        const hasCheckbox = (state && state.checkboxesP && state.checkboxesP.length > 0) ||
-                          (state && state.checkboxesG && state.checkboxesG.length > 0);
-        if (!hasCheckbox) {
-            missingFields.push('imagen seleccionada');
+        // Validar que tenga al menos una imagen P seleccionada (obligatorio)
+        const hasCheckboxP = (state && state.checkboxesP && state.checkboxesP.length > 0);
+        if (!hasCheckboxP) {
+            missingFields.push('imagen de producto (P)');
         }
         
         if (missingFields.length > 0) {
@@ -749,6 +795,18 @@ function hideProgressBar() {
 }
 
 /**
+ * Compara dos arrays y determina si son iguales.
+ */
+function arraysEqual(arr1, arr2) {
+    if (!arr1 && !arr2) return true;
+    if (!arr1 || !arr2) return false;
+    if (arr1.length !== arr2.length) return false;
+    const sorted1 = [...arr1].sort();
+    const sorted2 = [...arr2].sort();
+    return sorted1.every((val, index) => val === sorted2[index]);
+}
+
+/**
  * Maneja el clic en el botón Preview.
  */
 async function handlePreview() {
@@ -758,6 +816,8 @@ async function handlePreview() {
     
     // Preparar datos para el preview
     const previewData = [];
+    let hasChanges = false;
+    let needsProcessing = false;
     
     for (let i = startIndex; i < endIndex; i++) {
         const product = allProducts[i];
@@ -805,23 +865,98 @@ async function handlePreview() {
             }
         }
         
+        // Verificar si hay cambios en los checkboxes comparando con el estado procesado anterior
+        const processedState = loadProcessedState(i);
+        const currentCheckboxesP = state.checkboxesP || [];
+        const currentCheckboxesG = state.checkboxesG || [];
+        
+        let productHasChanges = false;
+        let imagesToAdd = [];
+        let imagesToRemove = [];
+        
+        if (!processedState) {
+            // No hay estado procesado anterior, todo es nuevo
+            productHasChanges = true;
+            needsProcessing = true;
+            imagesToAdd = [productImage, ...galleryImages].filter(img => img !== null);
+        } else {
+            // Comparar checkboxes actuales con los procesados anteriormente
+            const prevCheckboxesP = processedState.checkboxesP || [];
+            const prevCheckboxesG = processedState.checkboxesG || [];
+            
+            if (!arraysEqual(currentCheckboxesP, prevCheckboxesP) || 
+                !arraysEqual(currentCheckboxesG, prevCheckboxesG)) {
+                productHasChanges = true;
+                needsProcessing = true;
+                
+                // Determinar qué imágenes agregar
+                const prevProductImage = prevCheckboxesP.length > 0 ? product.images[prevCheckboxesP[0]] : null;
+                const prevGalleryImages = prevCheckboxesG.map(idx => product.images[idx]);
+                
+                const currentImages = [productImage, ...galleryImages].filter(img => img !== null);
+                const prevImages = [prevProductImage, ...prevGalleryImages].filter(img => img !== null);
+                
+                // Imágenes nuevas que necesitan marca de agua
+                imagesToAdd = currentImages.filter(img => !prevImages.includes(img));
+                // Imágenes que ya no están seleccionadas y deben eliminarse
+                imagesToRemove = prevImages.filter(img => !currentImages.includes(img));
+            }
+        }
+        
+        if (productHasChanges) {
+            hasChanges = true;
+        }
+        
         previewData.push({
             collection: product.collection,
             page: product.page,
             name: product.name,
-            folderName: folderName,  // Nombre de carpeta con sufijo si es duplicado
+            folderName: folderName,
             title: titleName,
             color: state.color,
             productImage: productImage || null,
-            galleryImages: galleryImages || []
+            galleryImages: galleryImages || [],
+            productIndex: i,
+            hasChanges: productHasChanges,
+            imagesToAdd: imagesToAdd,
+            imagesToRemove: imagesToRemove
         });
+    }
+    
+    // Si no hay cambios, mostrar mensaje y redirigir directamente a preview
+    if (!hasChanges) {
+        const footer = document.getElementById('incomplete-items-footer');
+        const footerText = document.getElementById('incomplete-items-text');
+        footerText.textContent = 'Las imágenes con marca de agua ya fueron procesadas anteriormente.';
+        footer.style.display = 'block';
+        
+        // Esperar 2 segundos y redirigir
+        setTimeout(() => {
+            footer.style.display = 'none';
+            
+            // Preparar datos de preview desde el estado guardado
+            const savedPreviewData = previewData.map(p => ({
+                collection: p.collection,
+                page: p.page,
+                name: p.name,
+                title: p.title,
+                color: p.color,
+                productImage: p.productImage ? `imagenes_marca_agua/${p.collection}/${p.page}/${p.folderName}/${p.productImage}` : null,
+                galleryImages: p.galleryImages.map(img => `imagenes_marca_agua/${p.collection}/${p.page}/${p.folderName}/${img}`)
+            }));
+            
+            sessionStorage.setItem('previewData', JSON.stringify(savedPreviewData));
+            sessionStorage.setItem('currentPage', currentPage.toString());
+            window.location.href = '/preview.html';
+        }, 2000);
+        
+        return;
     }
     
     // Calcular total de imágenes a procesar para la barra de progreso
     let totalImages = 0;
     previewData.forEach(product => {
-        if (product.productImage) totalImages++;
-        totalImages += product.galleryImages.length;
+        totalImages += product.imagesToAdd.length;
     });
     
     // Mostrar barra de progreso
@@ -857,6 +992,15 @@ async function handlePreview() {
         
         const data = await response.json();
         if (data.success) {
+            // Guardar el estado procesado para cada producto
+            for (let i = startIndex; i < endIndex; i++) {
+                const state = productStates[i];
+                saveProcessedState(i, {
+                    checkboxesP: state.checkboxesP || [],
+                    checkboxesG: state.checkboxesG || []
+                });
+            }
+            
             // Esperar un momento para que se vea el 100%
             setTimeout(() => {
                 hideProgressBar();

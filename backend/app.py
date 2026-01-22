@@ -76,6 +76,7 @@ def api_products():
 def api_preview():
     """
     Procesa 25 productos y aplica marca de agua a las imágenes seleccionadas.
+    Solo procesa imágenes nuevas y elimina las descartadas.
     
     Body esperado:
     {
@@ -86,8 +87,11 @@ def api_preview():
                 "name": "款号：1006",
                 "title": "Camiseta Básica",
                 "color": "Rojo",
-                "productImage": "09591a65.jpg",  // imagen con checkbox P
-                "galleryImages": ["0c2a2ee3.jpg", ...]  // imágenes con checkbox G
+                "productImage": "09591a65.jpg",
+                "galleryImages": ["0c2a2ee3.jpg", ...],
+                "hasChanges": true,
+                "imagesToAdd": ["09591a65.jpg", ...],
+                "imagesToRemove": ["old_image.jpg", ...]
             },
             ...
         ]
@@ -105,9 +109,12 @@ def api_preview():
             collection = product_data.get('collection')
             page = product_data.get('page')
             product_name = product_data.get('name')
-            folder_name = product_data.get('folderName', product_name)  # Usar folderName si existe (para duplicados)
-            product_image = product_data.get('productImage')  # Imagen con checkbox P
-            gallery_images = product_data.get('galleryImages', [])  # Imágenes con checkbox G
+            folder_name = product_data.get('folderName', product_name)
+            product_image = product_data.get('productImage')
+            gallery_images = product_data.get('galleryImages', [])
+            has_changes = product_data.get('hasChanges', False)
+            images_to_add = product_data.get('imagesToAdd', [])
+            images_to_remove = product_data.get('imagesToRemove', [])
             
             # Validar que los campos requeridos no sean None
             if not collection or not page or not product_name:
@@ -132,43 +139,46 @@ def api_preview():
                 "galleryImages": []
             }
             
-            # Procesar imagen de producto (P)
-            if product_image and product_image.strip():  # Verificar que no sea None ni vacío
-                try:
-                    input_path = input_base / product_image
-                    output_path = output_base / product_image
-                    
-                    if input_path.exists():
-                        if apply_watermark(str(input_path), str(output_path)):
-                            # Ruta relativa para el frontend usando folder_name
-                            processed_product["productImage"] = f"imagenes_marca_agua/{collection}/{page}/{folder_name}/{product_image}"
+            # Si hay cambios, procesar
+            if has_changes:
+                # Eliminar imágenes descartadas
+                for image_to_remove in images_to_remove:
+                    if image_to_remove and image_to_remove.strip():
+                        try:
+                            output_path = output_base / image_to_remove
+                            if output_path.exists():
+                                output_path.unlink()
+                                logger.info(f"Imagen eliminada: {output_path}")
+                        except Exception as e:
+                            logger.error(f"Error al eliminar imagen {image_to_remove}: {str(e)}")
+                
+                # Procesar solo imágenes nuevas
+                for image_to_add in images_to_add:
+                    if not image_to_add or not image_to_add.strip():
+                        continue
+                    try:
+                        input_path = input_base / image_to_add
+                        output_path = output_base / image_to_add
+                        
+                        if input_path.exists():
+                            if apply_watermark(str(input_path), str(output_path)):
+                                logger.info(f"Marca de agua aplicada a: {output_path}")
+                            else:
+                                logger.warning(f"No se pudo aplicar marca de agua a {input_path}")
                         else:
-                            logger.warning(f"No se pudo aplicar marca de agua a {input_path}")
-                    else:
-                        logger.warning(f"Imagen no encontrada: {input_path}")
-                except Exception as e:
-                    logger.error(f"Error al procesar imagen de producto {product_image}: {str(e)}")
+                            logger.warning(f"Imagen no encontrada: {input_path}")
+                    except Exception as e:
+                        logger.error(f"Error al procesar imagen {image_to_add}: {str(e)}")
             
-            # Procesar imágenes de galería (G)
+            # Construir las rutas finales para el frontend
+            if product_image and product_image.strip():
+                processed_product["productImage"] = f"imagenes_marca_agua/{collection}/{page}/{folder_name}/{product_image}"
+            
             for gallery_image in gallery_images:
-                if not gallery_image or not gallery_image.strip():  # Validar que no sea None ni vacío
-                    continue
-                try:
-                    input_path = input_base / gallery_image
-                    output_path = output_base / gallery_image
-                    
-                    if input_path.exists():
-                        if apply_watermark(str(input_path), str(output_path)):
-                            processed_product["galleryImages"].append(
-                                f"imagenes_marca_agua/{collection}/{page}/{folder_name}/{gallery_image}"
-                            )
-                        else:
-                            logger.warning(f"No se pudo aplicar marca de agua a {input_path}")
-                    else:
-                        logger.warning(f"Imagen no encontrada: {input_path}")
-                except Exception as e:
-                    logger.error(f"Error al procesar imagen de galería {gallery_image}: {str(e)}")
-                    continue
+                if gallery_image and gallery_image.strip():
+                    processed_product["galleryImages"].append(
+                        f"imagenes_marca_agua/{collection}/{page}/{folder_name}/{gallery_image}"
+                    )
             
             processed_products.append(processed_product)
         
@@ -191,6 +201,52 @@ def api_process():
         return jsonify({"success": True, "message": "Lote procesado correctamente"}), 200
     except Exception as e:
         logger.error(f"Error al procesar: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/delete-product-folder', methods=['POST'])
+def api_delete_product_folder():
+    """
+    Elimina la carpeta de un producto en imagenes_marca_agua/.
+    
+    Body esperado:
+    {
+        "collection": "Trapstar系列",
+        "page": "3",
+        "folderName": "款号：1006"
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "Formato de datos inválido"}), 400
+        
+        collection = data.get('collection')
+        page = data.get('page')
+        folder_name = data.get('folderName')
+        
+        if not collection or not page or not folder_name:
+            return jsonify({"success": False, "error": "Faltan parámetros requeridos"}), 400
+        
+        # Construir la ruta de la carpeta a eliminar
+        import shutil
+        folder_path = PROJECT_ROOT / "imagenes_marca_agua" / collection / page / folder_name
+        
+        if folder_path.exists() and folder_path.is_dir():
+            try:
+                shutil.rmtree(folder_path)
+                logger.info(f"Carpeta eliminada: {folder_path}")
+                return jsonify({"success": True, "message": "Carpeta eliminada correctamente"}), 200
+            except Exception as e:
+                logger.error(f"Error al eliminar carpeta {folder_path}: {str(e)}")
+                return jsonify({"success": False, "error": f"Error al eliminar carpeta: {str(e)}"}), 500
+        else:
+            # No existe la carpeta, pero retornamos éxito igualmente
+            logger.info(f"Carpeta no existe (probablemente nunca fue procesada): {folder_path}")
+            return jsonify({"success": True, "message": "Carpeta no existe"}), 200
+            
+    except Exception as e:
+        logger.error(f"Error al eliminar carpeta de producto: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
