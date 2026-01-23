@@ -8,7 +8,7 @@ let allTitles = [];
 let allCollections = [];
 let selectedCollection = null;
 let currentPage = 1;
-const PRODUCTS_PER_PAGE = 3;  // Reducido a 3 para facilitar pruebas
+const PRODUCTS_PER_PAGE = 25;
 let productStates = {}; // Estado de cada producto: {title, color, checkboxes}
 let duplicateCounters = {}; // Contador de duplicados por producto original: {productKey: count}
 

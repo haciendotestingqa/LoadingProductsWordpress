@@ -208,7 +208,7 @@ async function handleProcess() {
             setTimeout(() => {
                 // Calcular siguiente página desde sessionStorage
                 const savedPage = parseInt(sessionStorage.getItem('currentPage')) || 1;
-                const totalPages = Math.ceil(parseInt(sessionStorage.getItem('totalProducts') || 0) / 3);  // 3 productos por página
+                const totalPages = Math.ceil(parseInt(sessionStorage.getItem('totalProducts') || 0) / 25);
                 const nextPage = savedPage < totalPages ? savedPage + 1 : savedPage;
                 
                 // Limpiar datos de preview

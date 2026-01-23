@@ -226,12 +226,9 @@ def api_process():
     }
     """
     try:
-        logger.info(f"🔥 DEBUG: ENDPOINT /api/process INICIADO")
         data = request.get_json()
-        logger.info(f"   - Datos recibidos: {data}")
         
         if not data or 'products' not in data:
-            logger.error(f"❌ DEBUG: Formato de datos inválido")
             return jsonify({"success": False, "error": "Formato de datos inválido"}), 400
         
         products = data['products']
@@ -239,15 +236,10 @@ def api_process():
         procesados_exitosos = 0
         procesados_con_error = 0
         
-        logger.info(f"🚀 Iniciando procesamiento de {total_productos} productos...")
-        logger.info(f"="*80)
+        logger.info(f"Iniciando procesamiento de {total_productos} productos...")
         
         for idx, product_data in enumerate(products, 1):
             try:
-                logger.info(f"="*80)
-                logger.info(f"DEBUG: Iniciando procesamiento del producto {idx}/{total_productos}")
-                logger.info(f"DEBUG: Datos recibidos: {product_data}")
-                
                 # Extraer datos del producto
                 product_base_id = product_data.get('productBaseId')
                 titulo = product_data.get('titulo')
@@ -257,10 +249,6 @@ def api_process():
                 folder_name = product_data.get('folderName')
                 product_image = product_data.get('productImage')
                 gallery_images = product_data.get('galleryImages', [])
-                
-                logger.info(f"DEBUG: Producto extraído - ID_Base:{product_base_id}, Título:{titulo}, Color:{color}")
-                logger.info(f"DEBUG: Imagen principal: {product_image}")
-                logger.info(f"DEBUG: Imágenes de galería: {gallery_images}")
                 
                 # Validar datos requeridos
                 if not all([product_base_id, titulo, color, collection, page, folder_name, product_image]):
@@ -279,10 +267,6 @@ def api_process():
                 imagen_principal_path = str(base_path / product_image)
                 imagenes_galeria_paths = [str(base_path / img) for img in gallery_images]
                 
-                logger.info(f"DEBUG: Base path: {base_path}")
-                logger.info(f"DEBUG: Ruta imagen principal: {imagen_principal_path}")
-                logger.info(f"DEBUG: Rutas galería: {imagenes_galeria_paths}")
-                
                 # Verificar que la imagen principal existe
                 if not Path(imagen_principal_path).exists():
                     logger.error(f"Producto {idx}: Imagen principal no encontrada: {imagen_principal_path}")
@@ -296,12 +280,6 @@ def api_process():
                     continue
                 
                 logger.info(f"Procesando producto {idx}/{total_productos}: {titulo} - {color}")
-                logger.info(f"DEBUG: Llamando a process_product_publication con:")
-                logger.info(f"  - product_base_id: {product_base_id} (tipo: {type(product_base_id)})")
-                logger.info(f"  - titulo: {titulo}")
-                logger.info(f"  - color: {color}")
-                logger.info(f"  - imagen_principal_path: {imagen_principal_path}")
-                logger.info(f"  - imagenes_galeria_paths: {imagenes_galeria_paths}")
                 
                 # Procesar publicación completa
                 result = process_product_publication(
@@ -311,8 +289,6 @@ def api_process():
                     imagen_principal_path=imagen_principal_path,
                     imagenes_galeria_paths=imagenes_galeria_paths
                 )
-                
-                logger.info(f"DEBUG: Resultado recibido de process_product_publication: {result}")
                 
                 # Registrar en reporte
                 if result["success"]:
@@ -335,13 +311,10 @@ def api_process():
                 
                 # Pequeño delay entre productos para no sobrecargar WordPress
                 if idx < total_productos:
-                    logger.info(f"⏳ Esperando 2 segundos antes del siguiente producto...")
                     time.sleep(2)
                 
             except Exception as e:
-                logger.error(f"ERROR CRÍTICO al procesar producto {idx}: {str(e)}")
-                logger.error(f"DEBUG: Tipo de error: {type(e).__name__}")
-                logger.error(f"DEBUG: Traceback completo:", exc_info=True)
+                logger.error(f"Error al procesar producto {idx}: {str(e)}", exc_info=True)
                 error_msg = f"ERROR: {str(e)}"
                 try:
                     add_product_to_report(
@@ -352,15 +325,9 @@ def api_process():
                 except Exception as report_error:
                     logger.error(f"ERROR al guardar en reporte: {report_error}")
                 procesados_con_error += 1
-                logger.info(f"DEBUG: Continuando con el siguiente producto...")
         
         # Resumen final
-        logger.info(f"="*80)
-        logger.info(f"🎉 DEBUG: RESUMEN FINAL DEL PROCESAMIENTO")
-        logger.info(f"   - Total productos: {total_productos}")
-        logger.info(f"   - Exitosos: {procesados_exitosos}")
-        logger.info(f"   - Errores: {procesados_con_error}")
-        logger.info(f"="*80)
+        logger.info(f"Procesamiento completado: {procesados_exitosos} exitosos, {procesados_con_error} errores")
         
         return jsonify({
             "success": True,
@@ -371,9 +338,7 @@ def api_process():
         }), 200
         
     except Exception as e:
-        logger.error(f"💥 ERROR GENERAL al procesar lote: {str(e)}")
-        logger.error(f"DEBUG: Tipo de error: {type(e).__name__}")
-        logger.error(f"DEBUG: Traceback completo:", exc_info=True)
+        logger.error(f"Error general al procesar lote: {str(e)}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
 
 
