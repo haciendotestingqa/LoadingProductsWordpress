@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
-from threading import Lock
+from threading import RLock
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 REPORT_FILE = PROJECT_ROOT / "reporte.json"
 
-# Lock para evitar condiciones de carrera en escrituras concurrentes
-report_lock = Lock()
+# RLock (Reentrant Lock) para evitar deadlocks cuando load_report llama a save_report
+report_lock = RLock()
 
 
 def load_report() -> Dict:
