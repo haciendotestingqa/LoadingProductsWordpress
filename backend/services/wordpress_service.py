@@ -119,7 +119,7 @@ def upload_image_to_media(image_path: str, filename: str) -> Optional[int]:
 
 def duplicate_product(product_id: int) -> Optional[int]:
     """
-    Duplica un producto en WooCommerce.
+    Duplica un producto en WooCommerce con reintentos automáticos para errores 500.
     
     Args:
         product_id: ID del producto base a duplicar
@@ -139,30 +139,72 @@ def duplicate_product(product_id: int) -> Optional[int]:
     
     auth = HTTPBasicAuth(CONSUMER_KEY, CONSUMER_SECRET)
     
-    try:
-        logger.info(f"   - Enviando petición POST para duplicar...")
-        response = requests.post(url, auth=auth, timeout=30)
-        logger.info(f"   - Status code recibido: {response.status_code}")
-        
-        if response.status_code == 200 or response.status_code == 201:
-            data = response.json()
-            logger.info(f"   - Respuesta JSON: {data}")
-            new_product_id = data.get('id')
-            logger.info(f"✅ Producto duplicado exitosamente: {product_id} -> {new_product_id}")
-            return new_product_id
-        else:
-            logger.error(f"❌ Error al duplicar producto {product_id}: {response.status_code}")
-            logger.error(f"   - Respuesta: {response.text[:500]}")
+    # Reintentos con backoff para errores 500 de servidor
+    for attempt in range(MAX_RETRIES):
+        try:
+            logger.info(f"   🔄 Intento de duplicación {attempt + 1}/{MAX_RETRIES}...")
+            response = requests.post(url, auth=auth, timeout=60)
+            logger.info(f"   - Status code recibido: {response.status_code}")
+            
+            if response.status_code == 200 or response.status_code == 201:
+                data = response.json()
+                logger.info(f"   - Respuesta JSON (primeros campos): id={data.get('id')}, name={data.get('name')}")
+                new_product_id = data.get('id')
+                logger.info(f"✅ Producto duplicado exitosamente: {product_id} -> {new_product_id}")
+                return new_product_id
+            
+            elif response.status_code == 500:
+                # Error 500 del servidor - puede ser temporal
+                logger.warning(f"⚠️ Error 500 al duplicar producto {product_id} (intento {attempt + 1}/{MAX_RETRIES})")
+                
+                # Intentar extraer mensaje de error del HTML
+                error_text = response.text[:1000] if len(response.text) < 1000 else response.text[:1000] + "..."
+                if "Fatal error" in response.text or "Maximum execution time" in response.text:
+                    logger.error(f"   - Error crítico de WordPress detectado:")
+                    logger.error(f"   - {error_text}")
+                else:
+                    logger.warning(f"   - Respuesta: {error_text}")
+                
+                # Reintento con backoff exponencial si no es el último intento
+                if attempt < MAX_RETRIES - 1:
+                    wait_time = RETRY_DELAY * (2 ** attempt)
+                    logger.info(f"   - Reintentando en {wait_time} segundos...")
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"❌ Falló la duplicación después de {MAX_RETRIES} intentos con error 500")
+                    return None
+            
+            else:
+                # Otros errores (400, 401, 404, etc.) - no reintentar
+                logger.error(f"❌ Error al duplicar producto {product_id}: {response.status_code}")
+                try:
+                    error_data = response.json()
+                    logger.error(f"   - Error JSON: {error_data}")
+                except:
+                    logger.error(f"   - Respuesta: {response.text[:500]}")
+                return None
+                
+        except requests.exceptions.Timeout:
+            logger.warning(f"⚠️ Timeout al duplicar producto {product_id} (intento {attempt + 1}/{MAX_RETRIES})")
+            if attempt < MAX_RETRIES - 1:
+                wait_time = RETRY_DELAY * (2 ** attempt)
+                logger.info(f"   - Reintentando en {wait_time} segundos...")
+                time.sleep(wait_time)
+            else:
+                logger.error(f"❌ Falló la duplicación después de {MAX_RETRIES} intentos (timeout)")
+                return None
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"❌ Error de conexión al duplicar producto {product_id}: {str(e)}")
+            logger.error(f"   - Tipo de error: {type(e).__name__}")
             return None
             
-    except requests.exceptions.RequestException as e:
-        logger.error(f"❌ Error de conexión al duplicar producto {product_id}: {str(e)}")
-        logger.error(f"   - Tipo de error: {type(e).__name__}")
-        return None
-    except Exception as e:
-        logger.error(f"💥 Error inesperado al duplicar producto {product_id}: {str(e)}")
-        logger.error(f"   - Tipo de error: {type(e).__name__}")
-        return None
+        except Exception as e:
+            logger.error(f"💥 Error inesperado al duplicar producto {product_id}: {str(e)}")
+            logger.error(f"   - Tipo de error: {type(e).__name__}")
+            return None
+    
+    return None
 
 
 def update_product(product_id: int, name: str, images: List[Dict[str, int]]) -> Optional[str]:

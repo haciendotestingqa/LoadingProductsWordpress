@@ -6,6 +6,7 @@ from flask_cors import CORS
 from pathlib import Path
 import logging
 import os
+import time
 
 from services.csv_service import load_titles
 from services.image_service import get_collections, get_products
@@ -331,6 +332,11 @@ def api_process():
                     )
                     procesados_con_error += 1
                     logger.error(f"Producto {idx} falló: {result['error']}")
+                
+                # Pequeño delay entre productos para no sobrecargar WordPress
+                if idx < total_productos:
+                    logger.info(f"⏳ Esperando 2 segundos antes del siguiente producto...")
+                    time.sleep(2)
                 
             except Exception as e:
                 logger.error(f"ERROR CRÍTICO al procesar producto {idx}: {str(e)}")
