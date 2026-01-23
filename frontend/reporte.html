@@ -83,6 +83,34 @@
             cursor: not-allowed;
         }
 
+        .btn-export-pdf {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.3s;
+        }
+
+        .btn-export-pdf:hover {
+            background: #c0392b;
+        }
+
+        .btn-export-pdf:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .buttons-group {
+            display: flex;
+            gap: 10px;
+        }
+
         .auto-refresh-toggle {
             display: flex;
             align-items: center;
@@ -224,10 +252,17 @@
         </div>
 
         <div class="reporte-controls">
-            <button id="btn-refresh" class="btn-refresh">
-                <span>🔄</span>
-                <span>Actualizar</span>
-            </button>
+            <div class="buttons-group">
+                <button id="btn-refresh" class="btn-refresh">
+                    <span>🔄</span>
+                    <span>Actualizar</span>
+                </button>
+                
+                <button id="btn-export-pdf" class="btn-export-pdf">
+                    <span>📄</span>
+                    <span>Exportar PDF</span>
+                </button>
+            </div>
             
             <div class="auto-refresh-toggle">
                 <input type="checkbox" id="auto-refresh" checked>
@@ -266,6 +301,10 @@
         </div>
     </div>
 
+    <!-- Librerías para exportar PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    
     <script src="/js/reporte.js"></script>
 </body>
 </html>

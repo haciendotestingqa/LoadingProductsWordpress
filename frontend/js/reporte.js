@@ -202,6 +202,247 @@ function setupRefreshButton() {
 }
 
 /**
+ * Obtiene los datos actuales del reporte para exportar.
+ */
+async function getReporteDataForExport() {
+    try {
+        const response = await fetch('/api/reporte-data');
+        const data = await response.json();
+        
+        if (data.success) {
+            return data.productos;
+        }
+        return [];
+    } catch (error) {
+        console.error('Error al obtener datos para exportar:', error);
+        return [];
+    }
+}
+
+/**
+ * Exporta el reporte como PDF con formato profesional.
+ */
+async function exportToPDF() {
+    const btnExport = document.getElementById('btn-export-pdf');
+    btnExport.disabled = true;
+    btnExport.querySelector('span:last-child').textContent = 'Generando...';
+    
+    try {
+        // Obtener datos actuales
+        const productos = await getReporteDataForExport();
+        
+        if (!productos || productos.length === 0) {
+            alert('No hay productos para exportar');
+            btnExport.disabled = false;
+            btnExport.querySelector('span:last-child').textContent = 'Exportar PDF';
+            return;
+        }
+        
+        // Calcular estadísticas
+        const total = productos.length;
+        const exitosos = productos.filter(p => p.estado === 'exitoso').length;
+        const errores = productos.filter(p => p.estado === 'error').length;
+        
+        // Crear instancia de jsPDF
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({
+            orientation: 'landscape',
+            unit: 'mm',
+            format: 'a4'
+        });
+        
+        // Configurar fuentes
+        doc.setFont('helvetica');
+        
+        // ===== ENCABEZADO =====
+        // Título principal
+        doc.setFontSize(20);
+        doc.setTextColor(102, 126, 234); // Color morado
+        doc.text('Reporte de Productos Procesados', 15, 20);
+        
+        // Fecha de generación
+        const now = new Date();
+        const dateString = now.toLocaleDateString('es-ES', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+        const timeString = now.toLocaleTimeString('es-ES');
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.text(`Generado el ${dateString} a las ${timeString}`, 15, 27);
+        
+        // ===== ESTADÍSTICAS =====
+        doc.setFontSize(12);
+        doc.setTextColor(0, 0, 0);
+        
+        // Cajas de estadísticas
+        const statsY = 35;
+        const boxWidth = 60;
+        const boxHeight = 18;
+        const gap = 10;
+        
+        // Total
+        doc.setFillColor(102, 126, 234);
+        doc.roundedRect(15, statsY, boxWidth, boxHeight, 3, 3, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(10);
+        doc.text('Total Procesados', 17, statsY + 6);
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text(total.toString(), 17, statsY + 14);
+        
+        // Exitosos
+        doc.setFillColor(40, 167, 69);
+        doc.roundedRect(15 + boxWidth + gap, statsY, boxWidth, boxHeight, 3, 3, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.text('Exitosos', 17 + boxWidth + gap, statsY + 6);
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text(exitosos.toString(), 17 + boxWidth + gap, statsY + 14);
+        
+        // Errores
+        doc.setFillColor(220, 53, 69);
+        doc.roundedRect(15 + (boxWidth + gap) * 2, statsY, boxWidth, boxHeight, 3, 3, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.text('Errores', 17 + (boxWidth + gap) * 2, statsY + 6);
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text(errores.toString(), 17 + (boxWidth + gap) * 2, statsY + 14);
+        
+        // ===== TABLA DE PRODUCTOS =====
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(0, 0, 0);
+        
+        // Preparar datos para la tabla (ordenar por número descendente)
+        const productosOrdenados = [...productos].sort((a, b) => b.numero - a.numero);
+        
+        // Mantener referencia a las URLs completas para los hipervínculos
+        const tableData = productosOrdenados.map(p => [
+            p.numero.toString(),
+            p.titulo,
+            p.url, // URL completa sin recortar
+            p.fecha || '-',
+            p.estado === 'exitoso' ? 'Exitoso' : 'Error'
+        ]);
+        
+        doc.autoTable({
+            startY: statsY + boxHeight + 10,
+            head: [['#', 'Título - Color', 'URL del Producto', 'Fecha', 'Estado']],
+            body: tableData,
+            theme: 'striped',
+            headStyles: {
+                fillColor: [102, 126, 234],
+                textColor: 255,
+                fontStyle: 'bold',
+                halign: 'left'
+            },
+            columnStyles: {
+                0: { cellWidth: 15, halign: 'center', fontStyle: 'bold' },
+                1: { cellWidth: 55 },
+                2: { cellWidth: 95, fontSize: 7, textColor: [102, 126, 234] }, // URL completa, azul
+                3: { cellWidth: 38, halign: 'center' },
+                4: { cellWidth: 25, halign: 'center' }
+            },
+            bodyStyles: {
+                fontSize: 9,
+                cellPadding: 3
+            },
+            alternateRowStyles: {
+                fillColor: [245, 245, 245]
+            },
+            didParseCell: function(data) {
+                // Colorear la columna de estado
+                if (data.column.index === 4 && data.section === 'body') {
+                    const estado = data.cell.raw;
+                    if (estado === 'Exitoso') {
+                        data.cell.styles.textColor = [21, 87, 36];
+                        data.cell.styles.fillColor = [212, 237, 218];
+                        data.cell.styles.fontStyle = 'bold';
+                    } else {
+                        data.cell.styles.textColor = [114, 28, 36];
+                        data.cell.styles.fillColor = [248, 215, 218];
+                        data.cell.styles.fontStyle = 'bold';
+                    }
+                }
+                
+                // Estilo para URLs en la columna 2
+                if (data.column.index === 2 && data.section === 'body') {
+                    const url = data.cell.raw;
+                    // Solo aplicar estilo de link si es una URL exitosa
+                    if (url && url.startsWith('http') && !url.startsWith('ERROR')) {
+                        data.cell.styles.textColor = [102, 126, 234]; // Azul
+                        data.cell.styles.fontStyle = 'italic';
+                    } else {
+                        data.cell.styles.textColor = [114, 28, 36]; // Rojo para errores
+                    }
+                }
+            },
+            didDrawCell: function(data) {
+                // Agregar hipervínculo clickeable a las URLs exitosas
+                if (data.column.index === 2 && data.section === 'body') {
+                    const url = data.cell.raw;
+                    if (url && url.startsWith('http') && !url.startsWith('ERROR')) {
+                        // Agregar link clickeable
+                        doc.link(
+                            data.cell.x,
+                            data.cell.y,
+                            data.cell.width,
+                            data.cell.height,
+                            { url: url }
+                        );
+                    }
+                }
+            },
+            margin: { left: 15, right: 15 },
+            tableWidth: 'auto'
+        });
+        
+        // ===== FOOTER =====
+        const pageCount = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+            doc.setPage(i);
+            
+            // Línea separadora
+            doc.setDrawColor(200, 200, 200);
+            doc.line(15, 200, 282, 200);
+            
+            // Texto del footer
+            doc.setFontSize(8);
+            doc.setTextColor(100, 100, 100);
+            doc.text('ValenciaDrip - Sistema de Gestión de Productos', 15, 205);
+            doc.text(`Página ${i} de ${pageCount}`, 260, 205);
+        }
+        
+        // ===== GUARDAR PDF =====
+        const fileName = `reporte_productos_${now.getFullYear()}_${(now.getMonth()+1).toString().padStart(2,'0')}_${now.getDate().toString().padStart(2,'0')}.pdf`;
+        doc.save(fileName);
+        
+    } catch (error) {
+        console.error('Error al generar PDF:', error);
+        alert('Error al generar el PDF. Por favor, intenta de nuevo.');
+    } finally {
+        btnExport.disabled = false;
+        btnExport.querySelector('span:last-child').textContent = 'Exportar PDF';
+    }
+}
+
+/**
+ * Configura el botón de exportar PDF.
+ */
+function setupExportButton() {
+    const btnExport = document.getElementById('btn-export-pdf');
+    
+    btnExport.addEventListener('click', () => {
+        exportToPDF();
+    });
+}
+
+/**
  * Inicializa la página.
  */
 document.addEventListener('DOMContentLoaded', () => {
@@ -213,4 +454,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Configurar botón de refresh
     setupRefreshButton();
+    
+    // Configurar botón de exportar PDF
+    setupExportButton();
 });
