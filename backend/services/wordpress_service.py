@@ -117,6 +117,57 @@ def upload_image_to_media(image_path: str, filename: str) -> Optional[int]:
     return None
 
 
+def link_image_to_product(attachment_id: int, product_id: int) -> bool:
+    """
+    Vincula una imagen (attachment) a un producto actualizando su post_parent.
+    Esto hace que la imagen aparezca como "vinculada" en la Media Library de WordPress.
+    
+    Args:
+        attachment_id: ID del attachment (imagen) en WordPress
+        product_id: ID del producto al que vincular la imagen
+    
+    Returns:
+        True si se vinculó exitosamente, False en caso contrario
+    """
+    logger.info(f"🔗 DEBUG link_image_to_product: Vinculando imagen {attachment_id} a producto {product_id}")
+    
+    if not WORDPRESS_PASS:
+        logger.error("❌ DEBUG: WORDPRESS_PASS no está configurado en .env")
+        return False
+    
+    url = f"{WP_BASE_URL.rstrip('/')}/wp-json/wp/v2/media/{attachment_id}"
+    auth = HTTPBasicAuth(WORDPRESS_USER, WORDPRESS_PASS)
+    
+    payload = {
+        "post": product_id  # Establece el post_parent del attachment
+    }
+    
+    headers = {
+        'Content-Type': 'application/json'
+    }
+    
+    try:
+        response = requests.post(
+            url,
+            json=payload,
+            headers=headers,
+            auth=auth,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            logger.info(f"✅ Imagen {attachment_id} vinculada exitosamente al producto {product_id}")
+            return True
+        else:
+            logger.warning(f"⚠️ No se pudo vincular imagen {attachment_id}: {response.status_code}")
+            logger.warning(f"   - Respuesta: {response.text[:200]}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ Error al vincular imagen {attachment_id}: {str(e)}")
+        return False
+
+
 def duplicate_product(product_id: int) -> Optional[int]:
     """
     Duplica un producto en WooCommerce con reintentos automáticos para errores 500.
@@ -289,6 +340,7 @@ def process_product_publication(
     1. Sube imágenes al Media Library
     2. Duplica el producto base
     3. Actualiza el producto con título, imágenes y estado
+    4. Vincula las imágenes al producto (para que aparezcan en Media Library)
     
     Args:
         product_base_id: ID del producto base en WooCommerce
@@ -386,6 +438,26 @@ def process_product_publication(
             }
         
         logger.info(f"✅ DEBUG: Producto actualizado OK - URL: {permalink}")
+        
+        # 6. Vincular todas las imágenes al producto para que aparezcan en Media Library
+        logger.info(f"🔗 DEBUG: PASO 6 - Vinculando imágenes al producto {new_product_id}...")
+        
+        # Vincular imagen principal
+        logger.info(f"   - Vinculando imagen principal {attachment_id_principal}...")
+        if link_image_to_product(attachment_id_principal, new_product_id):
+            logger.info(f"   ✅ Imagen principal vinculada")
+        else:
+            logger.warning(f"   ⚠️ No se pudo vincular imagen principal (no crítico)")
+        
+        # Vincular imágenes de galería
+        for idx, attachment_id_galeria in enumerate(attachment_ids_galeria, 1):
+            logger.info(f"   - Vinculando imagen de galería {idx}/{len(attachment_ids_galeria)}: ID {attachment_id_galeria}...")
+            if link_image_to_product(attachment_id_galeria, new_product_id):
+                logger.info(f"   ✅ Imagen de galería {idx} vinculada")
+            else:
+                logger.warning(f"   ⚠️ No se pudo vincular imagen de galería {idx} (no crítico)")
+        
+        logger.info(f"🔗 DEBUG: Vinculación completada")
         logger.info(f"🎉 DEBUG: FIN process_product_publication - ÉXITO TOTAL")
         
         return {
