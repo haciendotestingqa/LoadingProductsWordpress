@@ -335,7 +335,7 @@ def extract_products_from_page(soup, base_url):
                     'name': product_name.strip()
                 })
     
-    # Eliminar duplicados por nombre (por si acaso)
+    # Detectar duplicados por nombre pero incluirlos en la lista para consolidar
     seen_names = {}  # Cambiar a dict para guardar el primer producto con ese nombre
     unique_products = []
     duplicates_info = []  # Lista de duplicados con información
@@ -346,7 +346,11 @@ def extract_products_from_page(soup, base_url):
             seen_names[product_name] = product  # Guardar el primer producto con ese nombre
             unique_products.append(product)
         else:
-            # Es un duplicado - guardar información
+            # Es un duplicado - agregarlo también pero marcado
+            product['is_duplicate'] = True
+            product['first_url'] = seen_names[product_name]['url']
+            unique_products.append(product)
+            # Guardar información del duplicado
             duplicates_info.append({
                 'name': product_name,
                 'url': product['url'],
@@ -733,10 +737,13 @@ def main(base_url=None, category_name=None, start_page=None, end_page=None, pass
             total_duplicates += duplicates_count
             all_duplicates.extend(duplicates_info)
             if duplicates_count > 0:
-                print(f"Encontrados {len(products)} productos únicos en página {page} ({duplicates_count} duplicados detectados y omitidos)")
+                print(f"Encontrados {len(products)} productos en página {page} ({duplicates_count} duplicados detectados - se consolidarán si tienen imágenes distintas)")
             else:
                 print(f"Encontrados {len(products)} productos en página {page}")
             print()
+            
+            # Rastrear productos procesados en esta página para consolidar duplicados en la misma página
+            page_processed_products = {}  # {product_name: {'dir': Path, 'image_ids': set}}
             
             # Procesar cada producto
             for idx, product in enumerate(products, 1):
@@ -745,8 +752,87 @@ def main(base_url=None, category_name=None, start_page=None, end_page=None, pass
                 print(f"[{idx}/{len(products)}] Producto: {product['name']}")
                 print(f"  URL: {product['url']}")
                 
-                # Verificar si este producto ya fue procesado en una página anterior
-                if product_name in processed_products:
+                # Verificar si este producto ya fue procesado en esta misma página (duplicado en misma página)
+                is_duplicate_same_page = product.get('is_duplicate', False) and product_name in page_processed_products
+                
+                # Verificar si este producto ya fue procesado en una página anterior (duplicado entre páginas)
+                is_duplicate_cross_page = product_name in processed_products
+                
+                if is_duplicate_same_page:
+                    # Duplicado en la misma página - consolidar si tiene imágenes distintas
+                    prev_info = page_processed_products[product_name]
+                    prev_dir = prev_info['dir']
+                    existing_image_ids = prev_info['image_ids']
+                    
+                    print(f"  🔄 Duplicado detectado en misma página: ya procesado anteriormente")
+                    print(f"     Consolidando imágenes nuevas...")
+                    
+                    # Obtener URLs de imágenes del producto actual
+                    image_urls, success = get_image_urls_from_product(product['url'], session)
+                    
+                    if not success or not image_urls:
+                        print(f"     ⚠ No se pudieron obtener imágenes del duplicado, omitiendo")
+                        continue
+                    
+                    # Descargar solo imágenes nuevas
+                    new_images_count = 0
+                    for img_url in image_urls:
+                        # Extraer ID de imagen de la URL
+                        url_parts = img_url.rstrip('/').split('/')
+                        if len(url_parts) >= 2:
+                            image_id = url_parts[-2]
+                            original_filename = url_parts[-1]
+                            
+                            if '.' in original_filename:
+                                ext = '.' + original_filename.split('.')[-1]
+                            else:
+                                ext = '.jpg'
+                            
+                            filename = image_id + ext
+                        else:
+                            continue
+                        
+                            # Si la imagen ya existe (por ID), saltar
+                        if image_id in existing_image_ids:
+                            continue
+                        
+                        # Verificar si existe el archivo con cualquier extensión
+                        image_path = prev_dir / filename
+                        if image_path.exists():
+                            existing_image_ids.add(image_id)
+                            continue
+                        
+                        # Verificar extensión alternativa
+                        if ext.lower() == '.jpeg':
+                            alt_path = prev_dir / (image_id + '.jpg')
+                        elif ext.lower() == '.jpg':
+                            alt_path = prev_dir / (image_id + '.jpeg')
+                        else:
+                            alt_path = None
+                        
+                        if alt_path and alt_path.exists():
+                            existing_image_ids.add(image_id)
+                            continue
+                        
+                        # Descargar imagen nueva en la carpeta del primer producto
+                        if download_image(img_url, image_path, session=session):
+                            existing_image_ids.add(image_id)
+                            new_images_count += 1
+                            total_images += 1
+                            time.sleep(DELAY_BETWEEN_IMAGES)
+                    
+                    # Actualizar el set de IDs en page_processed_products
+                    prev_info['image_ids'] = existing_image_ids
+                    
+                    if new_images_count > 0:
+                        print(f"     ✓ Agregadas {new_images_count} imágenes nuevas (total: {len(existing_image_ids)})")
+                    else:
+                        print(f"     ℹ No hay imágenes nuevas, todas ya están descargadas - omitido")
+                    
+                    continue  # No procesar más este duplicado
+                
+                elif is_duplicate_cross_page:
+                    # Duplicado entre páginas - usar lógica existente
                     prev_info = processed_products[product_name]
                     prev_page = prev_info['page']
                     prev_dir = prev_info['dir']
@@ -795,9 +881,14 @@ def main(base_url=None, category_name=None, start_page=None, end_page=None, pass
                             else:
                                 continue
                             
-                            # Si la imagen ya existe, saltar
+                            # Si la imagen ya existe (por ID), saltar
+                            if image_id in existing_image_ids:
+                                continue
+                            
+                            # Verificar si existe el archivo con cualquier extensión
                             image_path = prev_dir / filename
                             if image_path.exists():
+                                existing_image_ids.add(image_id)
                                 continue
                             
                             # Verificar extensión alternativa
@@ -809,18 +900,20 @@ def main(base_url=None, category_name=None, start_page=None, end_page=None, pass
                                 alt_path = None
                             
                             if alt_path and alt_path.exists():
+                                existing_image_ids.add(image_id)
                                 continue
                             
                             # Descargar imagen nueva en la carpeta de la primera página
                             if download_image(img_url, image_path, session=session):
+                                existing_image_ids.add(image_id)
                                 new_images_count += 1
                                 total_images += 1
                                 time.sleep(DELAY_BETWEEN_IMAGES)
                         
                         if new_images_count > 0:
-                            print(f"     ✓ Agregadas {new_images_count} imágenes nuevas (total: {len(existing_image_ids) + new_images_count})")
+                            print(f"     ✓ Agregadas {new_images_count} imágenes nuevas (total: {len(existing_image_ids)})")
                         else:
-                            print(f"     ℹ No hay imágenes nuevas, todas ya están descargadas")
+                            print(f"     ℹ No hay imágenes nuevas, todas ya están descargadas - omitido")
                         
                         cross_page_duplicates.append({
                             'name': product['name'],
@@ -839,6 +932,21 @@ def main(base_url=None, category_name=None, start_page=None, end_page=None, pass
                     # Registrar este producto como procesado solo si fue exitoso y tiene imágenes
                     if success and images > 0:
                         product_dir = base_dir / str(page) / product_name
+                        
+                        # Obtener IDs de imágenes descargadas para consolidación
+                        image_ids = set()
+                        if product_dir.exists():
+                            for img_file in product_dir.glob("*"):
+                                if img_file.is_file() and img_file.suffix.lower() in ['.jpg', '.jpeg', '.png', '.webp']:
+                                    image_ids.add(img_file.stem)  # ID sin extensión
+                        
+                        # Registrar en página actual para consolidar duplicados en misma página
+                        page_processed_products[product_name] = {
+                            'dir': product_dir,
+                            'image_ids': image_ids
+                        }
+                        
+                        # Registrar en productos procesados globales para consolidar entre páginas
                         processed_products[product_name] = {
                             'page': page,
                             'dir': product_dir
@@ -866,9 +974,9 @@ def main(base_url=None, category_name=None, start_page=None, end_page=None, pass
     print(f"  ✓ Exitosos: {total_products - failed_products}")
     print(f"  ✗ Fallidos: {failed_products}")
     if total_duplicates > 0:
-        print(f"  🔄 Duplicados en misma página (omitidos): {total_duplicates}")
+        print(f"  🔄 Duplicados en misma página detectados: {total_duplicates} (consolidados si tienen imágenes distintas)")
     if cross_page_duplicates:
-        print(f"  🔄 Duplicados entre páginas (omitidos): {len(cross_page_duplicates)}")
+        print(f"  🔄 Duplicados entre páginas detectados: {len(cross_page_duplicates)} (consolidados si tienen imágenes distintas)")
     
     # Mostrar detalles de duplicados
     if total_duplicates > 0 or cross_page_duplicates:
