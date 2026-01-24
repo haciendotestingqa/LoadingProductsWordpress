@@ -355,85 +355,99 @@ def extract_products_from_page(soup, base_url):
     
     return (unique_products, len(duplicates_info), duplicates_info)
 
-def get_image_urls_from_product(product_url, session=None):
-    """Obtiene las URLs de todas las imágenes de un producto
+def get_image_urls_from_product(product_url, session=None, retries=MAX_RETRIES):
+    """Obtiene las URLs de todas las imágenes de un producto, con reintentos.
     
     Returns:
         tuple: (list of image URLs, success: bool) - success es False si hubo un error al obtener las URLs
     """
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Referer': 'https://yitian333.x.yupoo.com/',
-        }
-        
-        # Usar sesión si está disponible (para mantener cookies de autenticación)
-        if session:
-            response = session.get(product_url, headers=headers, timeout=10)
-        else:
-            response = requests.get(product_url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Buscar imágenes en el visor de galería
-        image_urls = []
-        
-        # Método 1: Buscar en elementos de imagen con clases específicas
-        img_elements = soup.find_all('img', class_=lambda x: x and ('image__img' in str(x) or 'showalbum__bigimg' in str(x)))
-        for img in img_elements:
-            src = img.get('src') or img.get('data-src') or img.get('data-original')
-            if src:
-                # Convertir URLs protocol-relative a https
-                if src.startswith('//'):
-                    src = 'https:' + src
-                # Solo procesar URLs válidas de imágenes de productos
-                if src.startswith('http') and 'photo.yupoo.com' in src:
-                    # Limpiar parámetros de tamaño para obtener la imagen completa
-                    src = re.sub(r'\?.*$', '', src)
-                    # Cambiar 'small' por 'large' para mejor calidad
-                    src = src.replace('/small.', '/large.')
-                    if src not in image_urls:
-                        image_urls.append(src)
-        
-        # Método 2: Buscar en divs con estilos de fondo
-        divs_with_bg = soup.find_all('div', style=lambda x: x and 'background-image' in str(x))
-        for div in divs_with_bg:
-            style = div.get('style', '')
-            match = re.search(r'url\(["\']?(https?://[^"\')]+|//[^"\')]+)["\']?\)', style)
-            if match:
-                url = match.group(1)
-                if url.startswith('//'):
-                    url = 'https:' + url
-                if 'photo.yupoo.com' in url:
-                    url = re.sub(r'\?.*$', '', url)
-                    url = url.replace('/small.', '/large.')
-                    if url not in image_urls:
-                        image_urls.append(url)
-        
-        # Método 3: Buscar todas las imágenes que parezcan ser de productos
-        all_imgs = soup.find_all('img')
-        for img in all_imgs:
-            src = img.get('src') or img.get('data-src') or img.get('data-original')
-            if src:
-                if src.startswith('//'):
-                    src = 'https:' + src
-                # Solo imágenes de photo.yupoo.com (productos reales)
-                if src.startswith('http') and 'photo.yupoo.com' in src:
-                    src = re.sub(r'\?.*$', '', src)
-                    src = src.replace('/small.', '/large.')
-                    # Filtrar logos, static, website
-                    if (src not in image_urls and 
-                        '/static/' not in src and 
-                        '/website/' not in src and
-                        '/icons/' not in src):
-                        image_urls.append(src)
-        
-        return (image_urls, True)  # Retornar tupla: (urls, success)
-        
-    except Exception as e:
-        print(f"  ✗ Error obteniendo imágenes: {e}")
-        return ([], False)  # Retornar lista vacía y False (falló)
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Referer': 'https://yitian333.x.yupoo.com/',
+    }
+    last_error = None
+    
+    for attempt in range(retries):
+        try:
+            if attempt > 0:
+                wait_time = attempt * 2
+                print(f"  ↻ Reintento {attempt + 1} de {retries} al obtener URLs (esperando {wait_time}s)...")
+                time.sleep(wait_time)
+            
+            # Usar sesión si está disponible (para mantener cookies de autenticación)
+            if session:
+                response = session.get(product_url, headers=headers, timeout=15)
+            else:
+                response = requests.get(product_url, headers=headers, timeout=15)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Buscar imágenes en el visor de galería
+            image_urls = []
+            
+            # Método 1: Buscar en elementos de imagen con clases específicas
+            img_elements = soup.find_all('img', class_=lambda x: x and ('image__img' in str(x) or 'showalbum__bigimg' in str(x)))
+            for img in img_elements:
+                src = img.get('src') or img.get('data-src') or img.get('data-original')
+                if src:
+                    # Convertir URLs protocol-relative a https
+                    if src.startswith('//'):
+                        src = 'https:' + src
+                    # Solo procesar URLs válidas de imágenes de productos
+                    if src.startswith('http') and 'photo.yupoo.com' in src:
+                        # Limpiar parámetros de tamaño para obtener la imagen completa
+                        src = re.sub(r'\?.*$', '', src)
+                        src = src.replace('/small.', '/large.')
+                        if src not in image_urls:
+                            image_urls.append(src)
+            
+            # Método 2: Buscar en divs con estilos de fondo
+            divs_with_bg = soup.find_all('div', style=lambda x: x and 'background-image' in str(x))
+            for div in divs_with_bg:
+                style = div.get('style', '')
+                match = re.search(r'url\(["\']?(https?://[^"\')]+|//[^"\')]+)["\']?\)', style)
+                if match:
+                    url = match.group(1)
+                    if url.startswith('//'):
+                        url = 'https:' + url
+                    if 'photo.yupoo.com' in url:
+                        url = re.sub(r'\?.*$', '', url)
+                        url = url.replace('/small.', '/large.')
+                        if url not in image_urls:
+                            image_urls.append(url)
+            
+            # Método 3: Buscar todas las imágenes que parezcan ser de productos
+            all_imgs = soup.find_all('img')
+            for img in all_imgs:
+                src = img.get('src') or img.get('data-src') or img.get('data-original')
+                if src:
+                    if src.startswith('//'):
+                        src = 'https:' + src
+                    # Solo imágenes de photo.yupoo.com (productos reales)
+                    if src.startswith('http') and 'photo.yupoo.com' in src:
+                        src = re.sub(r'\?.*$', '', src)
+                        src = src.replace('/small.', '/large.')
+                        # Filtrar logos, static, website
+                        if (src not in image_urls and 
+                            '/static/' not in src and 
+                            '/website/' not in src and
+                            '/icons/' not in src):
+                            image_urls.append(src)
+            
+            return (image_urls, True)  # Retornar tupla: (urls, success)
+            
+        except Exception as e:
+            last_error = e
+            if attempt < retries - 1:
+                continue
+            else:
+                print(f"  ✗ Error obteniendo imágenes (tras {retries} intentos): {e}")
+                return ([], False)  # Retornar lista vacía y False (falló)
+    
+    if last_error:
+        print(f"  ✗ Error obteniendo imágenes (tras {retries} intentos): {last_error}")
+    return ([], False)
 
 def download_image(image_url, save_path, retries=MAX_RETRIES, session=None):
     """Descarga una imagen con reintentos y manejo robusto de errores de conexión"""
